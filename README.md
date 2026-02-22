@@ -8,10 +8,15 @@ A Discord bot that automatically fixes broken social media embeds by replacing d
 ## Supported Platforms
 
 - **Twitter/X** → fixupx.com
-- **TikTok** → vxtiktok.com
-- **Instagram** → ddinstagram.com
+- **TikTok** → tnktok.com
+- **Instagram** → gginstagram.com
 - **Reddit** → rxddit.com
 - **Pixiv** → phixiv.net
+
+## Backup Proxy Domains
+
+If a primary proxy domain becomes unavailable, these backup alternatives can be used:
+- **Instagram:** uuinstagram.com, d.vxinstagram.com
 
 ## Setup Instructions
 

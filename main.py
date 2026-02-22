@@ -15,10 +15,15 @@ client = discord.Client(intents=intents)
 DOMAIN_MAP = {
     'twitter.com': 'fixupx.com',
     'x.com': 'fixupx.com',
-    'tiktok.com': 'vxtiktok.com',
-    'instagram.com': 'ddinstagram.com',
+    'tiktok.com': 'tnktok.com',
+    'instagram.com': 'gginstagram.com',
     'reddit.com': 'rxddit.com',
     'pixiv.net': 'phixiv.net'
+}
+
+# Backup proxy domains if primary ones fail (for future use)
+BACKUP_DOMAINS = {
+    'instagram.com': ['uuinstagram.com', 'd.vxinstagram.com']
 }
 
 # Construct a regex pattern dynamically from the dictionary keys
