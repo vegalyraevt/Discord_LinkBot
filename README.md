@@ -2,6 +2,9 @@
 
 A Discord bot that automatically fixes broken social media embeds by replacing domain names with embed-friendly alternatives.
 
+## Invite me!
+[Discord Invite Link](https://discord.com/oauth2/authorize?client_id=1475244291944218715&permissions=2322581411986432&integration_type=0&scope=bot)
+
 ## Supported Platforms
 
 - **Twitter/X** → fixupx.com
