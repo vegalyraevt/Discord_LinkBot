@@ -1,6 +1,7 @@
 import discord
 import re
 import os
+import random
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -26,6 +27,13 @@ BACKUP_DOMAINS = {
     'instagram.com': ['gginstagram.com', 'd.vxinstagram.com']
 }
 
+# Zelda Easter Egg Data
+ZELDA_TEXT_RESPONSES = [
+    "HYYAAAAAA! <:link:1475252964708057118>",
+    "Hey! Listen! 🧚",
+    "It's dangerous to go alone! Take this. ⚔️ <:link:1475252964708057118>"
+]
+
 # Construct a regex pattern dynamically from the dictionary keys
 DOMAINS_PATTERN = '|'.join(re.escape(domain) for domain in DOMAIN_MAP.keys())
 URL_REGEX = re.compile(rf'https?://(?:www\.)?({DOMAINS_PATTERN})(/[^\s]*)')
@@ -39,6 +47,39 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # ===== EASTER EGG 1: Direct Ping Response =====
+    if client.user.mentioned_in(message):
+        # 10% chance for sound, 35% chance for image, 55% chance for text
+        rand_response = random.randint(1, 100)
+        
+        if rand_response <= 10:  # 10% - Sound
+            sounds_dir = "sounds"
+            if os.path.exists(sounds_dir):
+                sound_files = [f for f in os.listdir(sounds_dir) if f.endswith(('.mp3', '.wav', '.ogg'))]
+                if sound_files:
+                    sound_file = random.choice(sound_files)
+                    await message.channel.send(file=discord.File(os.path.join(sounds_dir, sound_file)))
+        elif rand_response <= 45:  # 35% - Image
+            images_dir = "images"
+            if os.path.exists(images_dir):
+                image_files = [f for f in os.listdir(images_dir) if f.endswith(('.png', '.jpg', '.jpeg', '.gif'))]
+                if image_files:
+                    image_file = random.choice(image_files)
+                    await message.channel.send(file=discord.File(os.path.join(images_dir, image_file)))
+        else:  # 55% - Text response
+            await message.channel.send(random.choice(ZELDA_TEXT_RESPONSES))
+
+    # ===== EASTER EGG 2: Pot Reaction =====
+    message_lower = message.content.lower()
+    if any(word in message_lower for word in ['pot', 'pots', 'smash']):
+        try:
+            # React with custom Link emoji and pot emoji
+            await message.add_reaction('<:link:1475252964708057118>')
+            await message.add_reaction('🍲')
+        except discord.errors.HTTPException:
+            pass  # Ignore permission or connection errors
+
+    # ===== LINK FIXING LOGIC (before deleting original message) =====
     try:
         # Find all matching URLs in the message
         matches = list(URL_REGEX.finditer(message.content))
@@ -56,6 +97,10 @@ async def on_message(message):
                 # Reconstruct the URL with the fixed domain
                 fixed_url = f"https://{fixed_domain}{path}"
                 fixed_content = fixed_content.replace(original_url, fixed_url)
+
+            # ===== EASTER EGG 3: Rare Item Drop (5% chance) =====
+            if random.random() < 0.05:
+                fixed_content += "\n\n*Da-da-da-daaa!* 🗝️"
 
             # Check if a webhook exists
             webhooks = await message.channel.webhooks()

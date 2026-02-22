@@ -65,6 +65,29 @@ Make sure your bot has these permissions in Discord:
 4. Deletes the original message
 5. Reposts the modified URL using a webhook, impersonating the original author
 
+## 🎮 Zelda Easter Eggs
+
+The bot includes hidden Legend of Zelda references that trigger automatically:
+
+### 1. Direct Ping Response (55% text, 35% image, 10% sound)
+When you mention the bot with `@Link`, it responds with:
+- **55% of the time:** Random text like "HYYAAAAAA! <:link:1475252964708057118>", "Hey! Listen! 🧚", or "It's dangerous to go alone! Take this. ⚔️ <:link:1475252964708057118>"
+- **35% of the time:** A random image from the `images/` folder
+- **10% of the time:** A random sound from the `sounds/` folder
+
+**To use:** Place `.png`, `.jpg`, `.gif` files in the `images/` folder and `.mp3`, `.wav`, `.ogg` files in the `sounds/` folder.
+
+### 2. Pot Reaction
+Message contains "pot", "pots", or "smash"? The bot reacts with:
+- Custom Link emoji: `<:link:1475252964708057118>`
+- Pot emoji: 🍲
+
+### 3. Rare Item Drop (5% chance)
+When a link is fixed and sent via webhook, there's a 5% chance the bot appends:
+```
+*Da-da-da-daaa!* 🗝️
+```
+
 ## Troubleshooting
 
 - **Bot not responding?** Ensure the Message Content Intent is enabled in Discord Developer Portal

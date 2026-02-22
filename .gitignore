@@ -2,6 +2,10 @@
 logs/
 *.log
 
+# Media files (images and sounds for easter eggs)
+images/
+sounds/
+
 # Environment variables
 .env
 .env.local
