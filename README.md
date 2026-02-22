@@ -1,6 +1,9 @@
 # LinkBot - Discord Embed Fixer
 
-A Discord bot that automatically fixes broken social media embeds by replacing domain names with embed-friendly alternatives.
+A Discord bot that automatically fixes broke### 2. Pot Reaction
+Message contains "pot", "pots", or "smash"? The bot reacts with:
+- Custom Link emoji: `<:link:1475252964708057118>`
+- Custom Pot emoji: `<:pot:1475279632512188718>`cial media embeds by replacing domain names with embed-friendly alternatives.
 
 ## Invite me!
 [Discord Invite Link](https://discord.com/oauth2/authorize?client_id=1475244291944218715&permissions=2322581411986432&integration_type=0&scope=bot)
@@ -80,7 +83,7 @@ When you mention the bot with `@Link`, it responds with:
 ### 2. Pot Reaction
 Message contains "pot", "pots", or "smash"? The bot reacts with:
 - Custom Link emoji: `<:link:1475252964708057118>`
-- Pot emoji: 🍲
+- Vase emoji: �
 
 ### 3. Rare Item Drop (5% chance)
 When a link is fixed and sent via webhook, there's a 5% chance the bot appends:

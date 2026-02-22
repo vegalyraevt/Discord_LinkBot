@@ -71,11 +71,11 @@ async def on_message(message):
 
     # ===== EASTER EGG 2: Pot Reaction =====
     message_lower = message.content.lower()
-    if any(word in message_lower for word in ['pot', 'pots', 'smash']):
+    if any(word in message_lower for word in ['pot', 'pots', 'smash', 'break', 'vase', 'link', 'links', 'rupees', 'rupee']):
         try:
-            # React with custom Link emoji and pot emoji
+            # React with custom Link emoji and custom Pot emoji
             await message.add_reaction('<:link:1475252964708057118>')
-            await message.add_reaction('🍲')
+            await message.add_reaction('<:pot:1475279632512188718>')
         except discord.errors.HTTPException:
             pass  # Ignore permission or connection errors
 
