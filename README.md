@@ -5,7 +5,6 @@ A lightweight, webhook-powered Discord bot built in Python (`discord.py`) that a
 ## Invite me!
 [Discord Invite Link](https://discord.com/oauth2/authorize?client_id=1475244291944218715&permissions=2322581411986432&integration_type=0&scope=bot)
 
-
 ## How It Works
 
 1. The bot listens to all messages in channels where it is invited.
@@ -27,28 +26,36 @@ The bot currently listens for and fixes links from the following domains by subs
 If a primary proxy domain becomes unavailable, these backup alternatives can be swapped into the code:
 * **Instagram:** `gginstagram.com`, `d.vxinstagram.com`
 
-## � Zelda Easter Eggs
+## Utility Features
+
+* **Anti-Phishing Protection:** Actively parses posted domains against the live SinkingYachts API. If a known malicious Discord scam link is detected, the bot instantly deletes the message and posts a warning to protect the server.
+* **Link Unshortening:** Automatically detects shortened URLs (like `bit.ly` or `tinyurl`) and replies with the true destination link to prevent hidden redirects.
+  * *[Insert Link Unshortening Screenshot Here]*
+* **Direct File Analysis:** Intercepts direct links to files (`.exe`, `.zip`, `.mp4`, etc.) and performs a secure header check to announce the exact file type and size to the channel before anyone clicks it.
+  * *[Insert Download Link Inspection Screenshot Here]*
+
+## Zelda Easter Eggs
 
 The bot includes hidden *Legend of Zelda* references that trigger automatically, adding charm without interrupting normal conversations:
 
 * **Direct Ping Response:** When you mention the bot directly with `@Link`, it responds with one of the following:
-  * **55% chance:** Random text like "HYYAAAAAA! <:link:1475252964708057118>", "Hey! Listen! �", or "It's dangerous to go alone! Take this. ⚔️ <:link:1475252964708057118>"
+  * **55% chance:** Iconic and funny quotes from the Zelda games, the 1989 cartoon, and the CD-i spin-offs.
   * **35% chance:** A random image from the `images/` folder.
   * **10% chance:** A random sound from the `sounds/` folder.
   *(Note: To use the media responses, place `.png`, `.jpg`, and `.gif` files in the `images/` folder, and `.mp3`, `.wav`, and `.ogg` files in the `sounds/` folder.)*
 
-* **Pot Reaction:** If a message contains the keywords `pot`, `pots`, `smash`, `break`, `vase`, `vases`, `jar`, `jars`, `urn`, `urns`, `ceramics`, `pottery`, `link`, `links`, `rupee`, `rupees`, `money`, `burglary`, `theft`, `vandalism`, `vandalize`, `steal`, `stealing`, `thief`, `rob`, `robbery`, `loot`, `looting`, `crime`, `shatter`, `trespass`, `trespassing`, `crash`, `destroy`, `destruction`, `ransack`, or `pillage`, the bot reacts with:
+* **Pot Reaction:** If a message contains keywords related to pots, vandalism, or theft, the bot reacts with:
   * Custom Link emoji: `<:link:1475252964708057118>`
   * Custom Pot emoji: `<:pot:1475279632512188718>`
 
-* **Cucco Reaction:** If a message contains the keywords `cucco`, `cuccos`, `cuckoo`, `cuckoos`, `chicken`, `chickens`, `poultry`, `peck`, `pecking`, `flock`, `kakariko`, `rooster`, `cluck`, `feathers`, `swarm`, or `revenge`, the bot reacts with:
-  * Chicken emoji: �
+* **Cucco Reaction:** Discussing chickens or cuccos triggers a flock of poultry reactions.
+  * Chicken emoji: 🐔
   * Custom Link emoji: `<:link:1475252964708057118>`
 
 * **The Golden Goddesses Reaction:** Discussing the Triforce, courage, wisdom, power, or the Golden Goddesses triggers an animated Triforce reaction: `<a:link_triforce:1475284641513607338>`
 
 * **Rare Item Drop:** When a link is fixed and sent via webhook, there is a 5% chance the bot appends the classic item get text to the embedded post:
-  * `*Da-da-da-daaa!* �️`
+  * `*Da-da-da-daaa!* 🗝️`
 
 ## Setup and Installation
 
@@ -60,6 +67,38 @@ The bot includes hidden *Legend of Zelda* references that trigger automatically,
 ### Installation Steps
 
 1. **Clone the repository:**
-   ```bash
    git clone <your-repo-url>
    cd LinkBot
+
+2. **Create and activate a virtual environment:**
+    python3 -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+3. **Install dependencies:**
+    pip install -r requirements.txt
+
+4. **Configure your bot token:**
+    cp .env.example .env
+    # Edit .env and add your Discord bot token
+    nano .env
+    
+5. **Run the bot:**
+    python3 main.py
+
+### Bot Permissions Required
+Make sure your bot has at least these permissions in Discord:
+(others are asked for, but theyre for planned features later.)
+
+    - Read Messages/View Channels
+    - Send Messages
+    - Manage Messages (to delete the original posts)
+    - Manage Webhooks
+    - Read Message History
+
+### Troubleshooting
+Bot not responding? Ensure the Message Content Intent is enabled in the Discord Developer Portal.
+Permission errors? Check that the bot's role actually has the required permissions in your specific server.
+Token issues? If the bot fails to log in, regenerate your token in the Discord Developer Portal immediately.
+
+### License
+MIT
