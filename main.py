@@ -29,13 +29,13 @@ BACKUP_DOMAINS = {
 
 # Zelda Easter Egg Data
 ZELDA_TEXT_RESPONSES = [
-    "HYYAAAAAA! <:link:1475252964708057118>",
+    "HYYAAAAAA! <a:link_spin:1475252964708057118>",
     "Hey! Listen! 🧚",
-    "It's dangerous to go alone! Take this. ⚔️ <:link:1475252964708057118>"
+    "It's dangerous to go alone! Take this. ⚔️ <a:link_spin:1475252964708057118>"
 ]
 
 # Expanded list for Pots/Crime/Destruction - word boundaries only
-POT_KEYWORDS = r'\b(pot|pots|smash|break|vase|vases|jar|jars|urn|urns|ceramics|pottery|link|links|rupee|rupees|money|burglary|theft|vandalism|vandalize|steal|stealing|thief|rob|robbery|loot|looting|crime|shatter|trespass|trespassing|crash|destroy|destruction|ransack|pillage)\b'
+POT_KEYWORDS = r'\b(pot|pots|smash|break|vase|vases|jar|jars|urn|urns|ceramics|pottery|rupee|rupees|money|burglary|theft|vandalism|vandalize|steal|stealing|thief|rob|robbery|loot|looting|crime|shatter|trespass|trespassing|crash|destroy|destruction|ransack|pillage)\b'
 
 # Expanded list for Cuccos/Chickens/Swarm - word boundaries only
 CUCCO_KEYWORDS = r'\b(cucco|cuccos|cuckoo|cuckoos|chicken|chickens|poultry|peck|pecking|flock|kakariko|rooster|cluck|feathers|swarm|revenge)\b'
@@ -61,8 +61,12 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # Debug: Log all messages
+    print(f"Message from {message.author}: {message.content}")
+
     # ===== EASTER EGG 1: Direct Ping Response =====
     if client.user.mentioned_in(message):
+        print(f"Bot was mentioned! Responding...")
         # 10% chance for sound, 35% chance for image, 55% chance for text
         rand_response = random.randint(1, 100)
         
@@ -81,13 +85,14 @@ async def on_message(message):
                     image_file = random.choice(image_files)
                     await message.channel.send(file=discord.File(os.path.join(images_dir, image_file)))
         else:  # 55% - Text response
+            print(f"Sending text response...")
             await message.channel.send(random.choice(ZELDA_TEXT_RESPONSES))
 
     # ===== EASTER EGG 2: Pot Reaction =====
     if POT_PATTERN.search(message.content):
         try:
-            # React with custom Link emoji and custom Pot emoji
-            await message.add_reaction('<:link:1475252964708057118>')
+            # React with custom link_spin emoji and custom Pot emoji
+            await message.add_reaction('<a:link_spin:1475252964708057118>')
             await message.add_reaction('<:pot:1475279632512188718>')
         except discord.errors.HTTPException:
             pass  # Ignore permission or connection errors
@@ -95,9 +100,9 @@ async def on_message(message):
     # ===== EASTER EGG 2B: Cucco/Chicken Reaction =====
     if CUCCO_PATTERN.search(message.content):
         try:
-            # React with two chicken emojis
+            # React with chicken emoji and link_spin emoji
             await message.add_reaction('🐔')
-            await message.add_reaction('<:link:1475252964708057118>')
+            await message.add_reaction('<a:link_spin:1475252964708057118>')
         except discord.errors.HTTPException:
             pass  # Ignore permission or connection errors
 
