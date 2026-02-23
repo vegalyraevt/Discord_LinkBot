@@ -30,9 +30,11 @@ If a primary proxy domain becomes unavailable, these backup alternatives can be 
 
 * **Anti-Phishing Protection:** Actively parses posted domains against the live SinkingYachts API. If a known malicious Discord scam link is detected, the bot instantly deletes the message and posts a warning to protect the server.
 * **Link Unshortening:** Automatically detects shortened URLs (like `bit.ly` or `tinyurl`) and replies with the true destination link to prevent hidden redirects.
-  * *[Insert Link Unshortening Screenshot Here]*
+  * <img width="994" height="832" alt="Screenshot 2026-02-22 225601" src="https://github.com/user-attachments/assets/22e0cdfa-0dd6-4cf7-a20d-d05a80901645" />
+
 * **Direct File Analysis:** Intercepts direct links to files (`.exe`, `.zip`, `.mp4`, etc.) and performs a secure header check to announce the exact file type and size to the channel before anyone clicks it.
-  * *[Insert Download Link Inspection Screenshot Here]*
+  * <img width="940" height="516" alt="Capture" src="https://github.com/user-attachments/assets/fadb7f4a-9ef6-454d-8869-182f81618b04" />
+
 
 ## Zelda Easter Eggs
 
