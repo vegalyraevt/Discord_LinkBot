@@ -41,7 +41,7 @@ POT_KEYWORDS = r'\b(pot|pots|smash|break|vase|vases|jar|jars|urn|urns|ceramics|p
 CUCCO_KEYWORDS = r'\b(cucco|cuccos|cuckoo|cuckoos|chicken|chickens|poultry|peck|pecking|flock|kakariko|rooster|cluck|feathers|swarm|revenge)\b'
 
 # Triforce-themed keywords
-TRIFORCE_KEYWORDS = r'\b(wisdom|courage|power|triforce|goddess|goddesses|din|nayru|farore|hylia|sacred realm|master sword|demise|triangle)\b'
+TRIFORCE_KEYWORDS = r'\b(wisdom|courage|power|triforce|goddess|goddesses|din|nayru|farore|hylia|master|sword|demise|triangle)\b'
 
 # Compile regex patterns with word boundaries
 POT_PATTERN = re.compile(POT_KEYWORDS, re.IGNORECASE)
