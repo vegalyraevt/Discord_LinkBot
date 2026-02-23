@@ -5,6 +5,8 @@ A lightweight, webhook-powered Discord bot built in Python (`discord.py`) that a
 ## Invite me!
 [Discord Invite Link](https://discord.com/oauth2/authorize?client_id=1475244291944218715&permissions=2322581411986432&integration_type=0&scope=bot)
 
+<img width="779" height="326" alt="derp-link-meme-7" src="https://github.com/user-attachments/assets/c964ce38-30a7-420b-bb84-a0cea7f67c89" />
+
 ## How It Works
 
 1. The bot listens to all messages in channels where it is invited.
@@ -54,6 +56,8 @@ The bot includes hidden *Legend of Zelda* references that trigger automatically,
 * **Pot Reaction:** If a message contains keywords related to pots, vandalism, or theft, the bot reacts with:
   * Custom Link emoji: `<:link:1475252964708057118>`
   * Custom Pot emoji: `<:pot:1475279632512188718>`
+    
+<img width="313" height="133" alt="Screenshot 2026-02-22 230053" src="https://github.com/user-attachments/assets/9081a076-8800-484a-8750-9c8ae42d0088" />
 
 * **Cucco Reaction:** Discussing chickens or cuccos triggers a flock of poultry reactions.
   * Chicken emoji: 🐔
