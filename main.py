@@ -4,6 +4,7 @@ import os
 import random
 import asyncio
 import aiohttp
+import json as _json
 from datetime import datetime
 from urllib.parse import urlparse, quote, unquote
 from dotenv import load_dotenv
@@ -706,7 +707,10 @@ async def on_message(message):
     # ===== UTILITY 10: AMAZON PRODUCT EMBED =====
     amazon_match = AMAZON_URL_REGEX.search(message.content)
     if amazon_match:
+        asin = amazon_match.group(1)
         amazon_url = amazon_match.group(0).split('?')[0]  # strip tracking params
+        # CamelCamelCamel price history link (free, no API key)
+        camel_url = f"https://camelcamelcamel.com/product/{asin}"
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -721,19 +725,106 @@ async def on_message(message):
                     if resp.status == 200:
                         html = await resp.text()
                         soup = BeautifulSoup(html, 'html.parser')
+
+                        # --- TITLE ---
+                        # Amazon omits og: tags for bots; use bond (luxury) or standard DOM
                         og_title = soup.find('meta', property='og:title')
+                        bond_title = soup.find('div', id='bond-title-desktop')
+                        span_title = soup.find('span', id='productTitle')
+                        title_tag = soup.find('title')
+                        product_title = (
+                            (og_title.get('content') if og_title else None)
+                            or (bond_title.get_text(strip=True) if bond_title else None)
+                            or (span_title.text.strip() if span_title else None)
+                            or (title_tag.string.strip() if title_tag and title_tag.string else None)
+                        )
+
+                        # --- IMAGE ---
                         og_image = soup.find('meta', property='og:image')
-                        product_title = (og_title['content'] if og_title else None) or (soup.title.string if soup.title else None)
-                        product_image = og_image['content'] if og_image else None
+                        product_image = og_image.get('content') if og_image else None
+                        if not product_image:
+                            img_tag = soup.find('img', id='landingImage') or soup.find('img', id='imgBlkFront')
+                            if img_tag:
+                                dynamic_json = img_tag.get('data-a-dynamic-image')
+                                if dynamic_json:
+                                    try:
+                                        dynamic_imgs = _json.loads(dynamic_json)
+                                        product_image = max(dynamic_imgs, key=lambda u: dynamic_imgs[u][0] * dynamic_imgs[u][1])
+                                    except Exception:
+                                        product_image = img_tag.get('src')
+                                else:
+                                    product_image = img_tag.get('src')
+
+                        # --- PRICE ---
+                        # corePrice_desktop has the formatted price; a-offscreen is screen-reader span inside it
+                        price_tag = soup.find('span', class_='a-offscreen')
+                        price = price_tag.text.strip() if price_tag else ''
+
+                        # --- DESCRIPTION ---
+                        # Try bond (luxury) → standard feature-bullets → productDescription
+                        description_lines = []
+                        bullets_div = (
+                            soup.find('div', id='bond-feature-bullets-desktop')
+                            or soup.find('div', id='feature-bullets')
+                        )
+                        if bullets_div:
+                            items = bullets_div.find_all('li')
+                            for li in items[:4]:  # max 4 bullets
+                                text = li.get_text(strip=True)
+                                if text:
+                                    description_lines.append(f'• {text}')
+
+                        if not description_lines:
+                            # Fall back to product description paragraph
+                            desc_div = (
+                                soup.find('div', id='bond-product-descriptions-desktop')
+                                or soup.find('div', id='productDescription')
+                            )
+                            if desc_div:
+                                raw = desc_div.get_text(separator=' ', strip=True)
+                                description_lines.append(raw[:500] + ('…' if len(raw) > 500 else ''))
+
+                        description_text = '\n'.join(description_lines) if description_lines else ''
+
+                        # --- PRODUCT SPECS TABLE ---
+                        # productOverview_feature_div: Brand | Color | Form | Finish | etc.
+                        specs = {}
+                        overview_div = soup.find('div', id='productOverview_feature_div')
+                        if overview_div:
+                            rows = overview_div.find_all('tr')
+                            for row in rows:
+                                cols = row.find_all(['th', 'td'])
+                                if len(cols) >= 2:
+                                    key = cols[0].get_text(strip=True)
+                                    val = cols[1].get_text(strip=True)
+                                    if key and val:
+                                        specs[key] = val
+
                         if product_title:
                             embed = discord.Embed(
-                                title=product_title.strip(),
+                                title=product_title[:256],
                                 url=amazon_url,
                                 color=discord.Color.orange()
                             )
+                            if description_text:
+                                embed.description = description_text[:1024]
+                            if price:
+                                embed.add_field(name="💰 Price", value=price, inline=True)
+                            # Show up to 4 spec fields inline
+                            for spec_key, spec_val in list(specs.items())[:4]:
+                                embed.add_field(name=spec_key, value=spec_val[:100], inline=True)
+                            embed.add_field(
+                                name="📈 Price History",
+                                value=f"[View on CamelCamelCamel]({camel_url})",
+                                inline=False
+                            )
                             if product_image:
                                 embed.set_thumbnail(url=product_image)
-                            await message.reply(embed=embed, mention_author=False)
+                            await message.reply(
+                                content=f"🛒 **Cleaned Amazon Link:** {amazon_url}",
+                                embed=embed,
+                                mention_author=False
+                            )
                             try:
                                 await message.edit(suppress=True)
                             except (discord.Forbidden, discord.HTTPException):
@@ -743,41 +834,48 @@ async def on_message(message):
 
     # ===== UTILITY 11: IMDB MOVIE INSPECTOR =====
     imdb_match = IMDB_URL_REGEX.search(message.content)
-    if imdb_match and OMDB_API_KEY:
-        imdb_id = imdb_match.group(1)
-        original_url = imdb_match.group(0)
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"https://www.omdbapi.com/?i={imdb_id}&apikey={OMDB_API_KEY}",
-                    timeout=aiohttp.ClientTimeout(total=5)
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json(content_type=None)
-                        if data.get('Response') == 'True':
-                            title       = data.get('Title', 'Unknown')
-                            year        = data.get('Year', '?')
-                            plot        = data.get('Plot', 'No plot available.')
-                            poster      = data.get('Poster', '')
-                            imdb_rating = data.get('imdbRating', 'N/A')
-                            rated       = data.get('Rated', 'N/A')
-                            embed = discord.Embed(
-                                title=f"{title} ({year})",
-                                description=plot,
-                                url=original_url,
-                                color=discord.Color.gold()
-                            )
-                            embed.add_field(name="⭐ IMDb Rating", value=imdb_rating, inline=True)
-                            embed.add_field(name="🔞 Age Rating",  value=rated,       inline=True)
-                            if poster and poster != 'N/A':
-                                embed.set_thumbnail(url=poster)
-                            await message.reply(embed=embed, mention_author=False)
-                            try:
-                                await message.edit(suppress=True)
-                            except (discord.Forbidden, discord.HTTPException):
-                                pass
-        except Exception as e:
-            print(f"❌ Failed to fetch IMDb info: {e}")
+    if imdb_match:
+        if not OMDB_API_KEY:
+            print("❌ OMDB_API_KEY is missing! Cannot fetch IMDb data.")
+        else:
+            imdb_id = imdb_match.group(1)
+            original_url = imdb_match.group(0)
+            print(f"🎬 IMDb match: {imdb_id}, key present: True")
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"https://www.omdbapi.com/?i={imdb_id}&apikey={OMDB_API_KEY}",
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as resp:
+                        print(f"🎬 OMDb status: {resp.status}")
+                        if resp.status == 200:
+                            data = await resp.json(content_type=None)
+                            if data.get('Response') == 'True':
+                                title       = data.get('Title', 'Unknown')
+                                year        = data.get('Year', '?')
+                                plot        = data.get('Plot', 'No plot available.')
+                                poster      = data.get('Poster', '')
+                                imdb_rating = data.get('imdbRating', 'N/A')
+                                rated       = data.get('Rated', 'N/A')
+                                embed = discord.Embed(
+                                    title=f"{title} ({year})",
+                                    description=plot,
+                                    url=original_url,
+                                    color=discord.Color.gold()
+                                )
+                                embed.add_field(name="⭐ IMDb Rating", value=imdb_rating, inline=True)
+                                embed.add_field(name="🔞 Age Rating",  value=rated,       inline=True)
+                                if poster and poster != 'N/A':
+                                    embed.set_thumbnail(url=poster)
+                                await message.reply(embed=embed, mention_author=False)
+                                try:
+                                    await message.edit(suppress=True)
+                                except (discord.Forbidden, discord.HTTPException):
+                                    pass
+                            else:
+                                print(f"❌ OMDb API Error: {data.get('Error')}")
+            except Exception as e:
+                print(f"❌ Failed to fetch IMDb info: {e}")
 
     # ===== UTILITY 8: URL TRACKING PARAMETER STRIPPER =====
     tracking_match = TRACKING_URL_REGEX.search(message.content)
