@@ -31,9 +31,39 @@ BACKUP_DOMAINS = {
 
 # Zelda Easter Egg Data
 ZELDA_TEXT_RESPONSES = [
+    # --- The Classics & Game Memes ---
     "HYYAAAAAA! <a:link_spin:1475252964708057118>",
     "Hey! Listen! 🧚",
-    "It's dangerous to go alone! Take this. ⚔️ <a:link_spin:1475252964708057118>"
+    "It's dangerous to go alone! Take this. ⚔️",
+    "It's a secret to everybody.",
+    "Dodongo dislikes smoke.",
+    "I AM ERROR.",
+    "You've met a terrible fate, haven't you?",
+    "A puppet without a role is merely garbage.",
+    "The flow of time is always cruel...",
+    "Grumble, grumble...",
+    "You got a green rupee! Don't spend it all in one place!",
+    "The wind... it is blowing...",
+    "Watch out!",
+    
+    # --- The 1989 Animated Series ---
+    "Well, excuuuuuuuse me, Princess! <a:link_spin:1475252964708057118>",
+    "Oh boy! I'm so hungry, I could eat an octorok! <a:link_spin:1475252964708057118>",
+    "I'm a hero, not a handyman! <a:link_spin:1475252964708057118>",
+    "I'll take a raincheck on that kiss, princess. Duty calls! <a:link_spin:1475252964708057118>",
+    "Looking good, princess, especially from this angle! <a:link_spin:1475252964708057118>",
+
+    # --- The CD-i Masterpieces ---
+    "Mah boi, this peace is what all true warriors strive for!",
+    "Lamp oil, rope, bombs? You want it? It's yours, my friend, as long as you have enough rubies.",
+    "Sorry Link, I can't give credit! Come back when you're a little, mmmm... richer!",
+    "Gee, it sure is boring around here.",
+    "I just wonder what Ganon's up to.",
+    "Squadala! We're off!",
+    "I guess that's worth a kiss, huh? <a:link_spin:1475252964708057118>",
+    "Great! I'll grab my stuff!",
+    "I can't wait to bomb some Dodongos! <a:link_spin:1475252964708057118>",
+    "You dare bring light to my lair?! You must die!"
 ]
 
 # Expanded list for Pots/Crime/Destruction - word boundaries only
