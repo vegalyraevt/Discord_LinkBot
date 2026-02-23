@@ -38,6 +38,33 @@ BACKUP_DOMAINS = {
     'instagram.com': ['gginstagram.com', 'd.vxinstagram.com']
 }
 
+# Language name → ISO 639-1 two-letter code mapping for .translate tag
+LANGUAGE_MAP = {
+    # Romance
+    'spanish': 'es', 'french': 'fr', 'portuguese': 'pt', 'italian': 'it',
+    'romanian': 'ro', 'catalan': 'ca',
+    # Germanic
+    'german': 'de', 'dutch': 'nl', 'swedish': 'sv', 'danish': 'da',
+    'norwegian': 'no', 'finnish': 'fi',
+    # Slavic
+    'russian': 'ru', 'polish': 'pl', 'ukrainian': 'uk', 'czech': 'cs',
+    'slovak': 'sk', 'bulgarian': 'bg', 'serbian': 'sr', 'croatian': 'hr',
+    # East Asian
+    'japanese': 'ja', 'chinese': 'zh', 'korean': 'ko',
+    # South / Southeast Asian
+    'hindi': 'hi', 'bengali': 'bn', 'thai': 'th', 'vietnamese': 'vi',
+    'indonesian': 'id', 'malay': 'ms',
+    # Middle Eastern / African
+    'arabic': 'ar', 'hebrew': 'he', 'turkish': 'tr', 'persian': 'fa',
+    'swahili': 'sw',
+    # Other
+    'english': 'en', 'greek': 'el', 'hungarian': 'hu',
+    # Allow bare ISO codes to pass through as-is (2-letter)
+}
+
+# Regex to detect and strip .translate or .translate.LANG suffix on a URL path
+TRANSLATE_SUFFIX_REGEX = re.compile(r'\.translate(?:\.([a-zA-Z]+))?$', re.IGNORECASE)
+
 # Zelda Easter Egg Data
 ZELDA_TEXT_RESPONSES = [
     # --- The Classics & Game Memes ---
@@ -192,8 +219,11 @@ IMDB_URL_REGEX = re.compile(
 # Domains notorious for tracking parameters
 # NOTE: Do NOT include domains that are in DOMAIN_MAP (embed-fixed sites like tiktok, instagram, twitter, x)
 # Those are handled by the embed fixer and should never hit the tracking stripper.
+# NOTE: youtube.com and youtu.be are intentionally excluded — YouTube Shorts are handled by the
+# link fixer (which naturally strips all params), and regular YouTube watch URLs don't need a bot
+# reply because Discord already embeds them natively. Adding them here caused duplicate replies.
 TRACKING_DOMAINS = {
-    'facebook.com', 'youtube.com', 'youtu.be', 'aliexpress.com', 'ebay.com',
+    'facebook.com', 'aliexpress.com', 'ebay.com',
 }
 TRACKING_URL_REGEX = re.compile(
     r'(https?://(?:www\.)?(?:' +
@@ -878,10 +908,22 @@ async def on_message(message):
                 print(f"❌ Failed to fetch IMDb info: {e}")
 
     # ===== UTILITY 8: URL TRACKING PARAMETER STRIPPER =====
+    # Only fires if the URL isn't already handled by the link fixer (DOMAIN_MAP) or Shorts converter,
+    # to avoid sending a standalone reply alongside another utility's existing reply.
     tracking_match = TRACKING_URL_REGEX.search(message.content)
     if tracking_match:
-        clean_url = tracking_match.group(1)
-        await message.reply(f"🧹 Clean link without tracking: {clean_url}", mention_author=False)
+        # Skip if the matched URL's domain is in DOMAIN_MAP (embed fixer handles those)
+        # or if there's a YouTube Shorts URL in the message (link fixer handles those)
+        tracking_url = tracking_match.group(0)
+        tracking_hostname = urlparse(tracking_url).hostname or ''
+        tracking_base = tracking_hostname.removeprefix('www.')
+        already_handled = (
+            tracking_base in DOMAIN_MAP
+            or YOUTUBE_SHORTS_REGEX.search(message.content) is not None
+        )
+        if not already_handled:
+            clean_url = tracking_match.group(1)
+            await message.reply(f"🧹 Clean link without tracking: {clean_url}", mention_author=False)
 
     # ===== EASTER EGG 1: Direct Ping Response =====
     if client.user.mentioned_in(message):
@@ -951,12 +993,49 @@ async def on_message(message):
                     fixed_content
                 )
 
+            # Collect (path, lang) pairs for fixupx translation fetches after webhook send
+            pending_translations = []  # list of (clean_path, lang_code)
+
             for match in matches:
                 matched_domain = match.group(1)
                 fixed_domain = DOMAIN_MAP[matched_domain]
-                original_url = match.group(0)
+                original_url = match.group(0)  # full URL as typed (may include .translate suffix)
                 path = match.group(2)
+
+                # ===== TRANSLATION TAG DETECTION =====
+                # Syntax: paste URL with .translate or .translate.spanish appended
+                # e.g. https://twitter.com/user/status/123.translate.japanese
+                translate_lang = None
+                translate_suffix_match = TRANSLATE_SUFFIX_REGEX.search(path)
+                if translate_suffix_match:
+                    lang_word = (translate_suffix_match.group(1) or 'en').lower()
+                    # Bare 2-letter ISO code passes through; full names are looked up
+                    if len(lang_word) == 2:
+                        translate_lang = lang_word
+                    else:
+                        translate_lang = LANGUAGE_MAP.get(lang_word, 'en')
+                    # Strip the .translate[.lang] suffix from path only
+                    # Keep original_url intact — it's used as the search key in fixed_content.replace()
+                    path = path[:translate_suffix_match.start()]
+
+                # Build the proxy URL (using the clean path, without .translate suffix)
                 fixed_url = f"https://{fixed_domain}{path}"
+
+                # Apply translation routing for supported proxies
+                if translate_lang:
+                    if fixed_domain == 'fixupx.com':
+                        # fixupx: append /lang at the end
+                        # e.g. https://fixupx.com/user/status/123 → https://fixupx.com/user/status/123/ja
+                        fixed_url = f"{fixed_url}/{translate_lang}"
+                        # Queue a translation fetch from fxtwitter API (OG tags don't contain translated text)
+                        pending_translations.append((path, translate_lang))
+                    elif fixed_domain == 'phixiv.net':
+                        # phixiv: insert /lang right after the domain
+                        # e.g. https://phixiv.net/artworks/123 → https://phixiv.net/ja/artworks/123
+                        fixed_url = f"https://{fixed_domain}/{translate_lang}{path}"
+                    # All other domains: translation not supported, use URL as-is
+
+                # Replace the full original URL (including any .translate suffix) with the fixed URL
                 fixed_content = fixed_content.replace(original_url, fixed_url)
 
             # ===== EASTER EGG 3: Rare Item Drop (5% chance) =====
@@ -973,6 +1052,32 @@ async def on_message(message):
                 username=message.author.display_name,
                 avatar_url=message.author.display_avatar.url
             )
+
+            # ===== FIXUPX TRANSLATION FETCH =====
+            # fixupx does NOT inject translated text into OG meta tags, so we fetch it
+            # directly from api.fxtwitter.com and post it as a follow-up message.
+            if pending_translations:
+                async with aiohttp.ClientSession() as session:
+                    for tweet_path, lang in pending_translations:
+                        api_url = f"https://api.fxtwitter.com{tweet_path}/{lang}"
+                        try:
+                            async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                                if resp.status == 200:
+                                    data = await resp.json(content_type=None)
+                                    tweet = data.get('tweet', {})
+                                    translation = tweet.get('translation', {})
+                                    translated_text = translation.get('text', '')
+                                    src_lang = translation.get('source_lang_en', translation.get('source_lang', '?'))
+                                    if translated_text:
+                                        await message.channel.send(
+                                            f"🌐 **Translation** ({src_lang} → {lang.upper()}):\n{translated_text}"
+                                        )
+                                    else:
+                                        await message.channel.send(
+                                            f"🌐 *(No translation available for this tweet)*"
+                                        )
+                        except Exception as e:
+                            print(f"❌ Translation fetch error: {e}")
 
             await message.delete()
     except discord.Forbidden:
