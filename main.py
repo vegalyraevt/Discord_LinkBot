@@ -3,7 +3,7 @@ import re
 import os
 import random
 import aiohttp
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -110,6 +110,53 @@ RICKROLL_URLS = [
     '<https://www.youtube.com/watch?v=ZkEv2SOHZJ0>',
 ]
 
+# ===== NEW FEATURE PATTERNS =====
+
+# GitHub blob URL with line numbers: #L10 or #L10-L20
+GITHUB_BLOB_REGEX = re.compile(
+    r'https?://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+?)#L(\d+)(?:-L(\d+))?'
+)
+
+# File extension to Discord syntax highlight language mapping
+GITHUB_LANG_MAP = {
+    '.py': 'python', '.js': 'javascript', '.ts': 'typescript', '.jsx': 'jsx',
+    '.tsx': 'tsx', '.java': 'java', '.c': 'c', '.cpp': 'cpp', '.h': 'h',
+    '.cs': 'csharp', '.go': 'go', '.rs': 'rust', '.rb': 'ruby', '.php': 'php',
+    '.swift': 'swift', '.kt': 'kotlin', '.lua': 'lua', '.r': 'r',
+    '.sql': 'sql', '.html': 'html', '.css': 'css', '.scss': 'scss',
+    '.json': 'json', '.xml': 'xml', '.yaml': 'yaml', '.yml': 'yaml',
+    '.toml': 'toml', '.md': 'markdown', '.sh': 'bash', '.bash': 'bash',
+    '.ps1': 'powershell', '.dockerfile': 'dockerfile',
+}
+
+# Music platform domains for Odesli/song.link
+MUSIC_DOMAINS = {'open.spotify.com', 'music.apple.com', 'soundcloud.com'}
+MUSIC_URL_REGEX = re.compile(
+    r'https?://(?:www\.)?(open\.spotify\.com|music\.apple\.com|soundcloud\.com)/[^\s\)\]>]+'
+)
+
+# Steam store URL: store.steampowered.com/app/{app_id}
+STEAM_URL_REGEX = re.compile(
+    r'https?://store\.steampowered\.com/app/(\d+)'
+)
+
+# Wikipedia article URL
+WIKI_URL_REGEX = re.compile(
+    r'https?://en\.wikipedia\.org/wiki/([^\s\)\]>#?]+)'
+)
+
+# Domains notorious for tracking parameters
+TRACKING_DOMAINS = {
+    'amazon.com', 'amazon.co.uk', 'amazon.ca', 'amazon.de', 'amazon.co.jp',
+    'twitter.com', 'x.com', 'tiktok.com', 'facebook.com', 'instagram.com',
+    'youtube.com', 'youtu.be', 'aliexpress.com', 'ebay.com',
+}
+TRACKING_URL_REGEX = re.compile(
+    r'(https?://(?:www\.)?(?:' +
+    '|'.join(re.escape(d) for d in TRACKING_DOMAINS) +
+    r')/[^\s\)\]>?]*)\?[^\s\)\]>]+'
+)
+
 # Construct a regex pattern dynamically from the dictionary keys
 DOMAINS_PATTERN = '|'.join(re.escape(domain) for domain in DOMAIN_MAP.keys())
 URL_REGEX = re.compile(rf'https?://(?:www\.)?({DOMAINS_PATTERN})(/[^\s]*)')
@@ -179,6 +226,122 @@ async def on_message(message):
                 await message.channel.send(f"📎 *File info: {content_type} | {file_size}*")
             except Exception as e:
                 print(f"❌ Failed to fetch file info for {file_url}: {e}")
+
+    # ===== UTILITY 4: GITHUB CODE SNIPPET EXTRACTOR =====
+    github_match = GITHUB_BLOB_REGEX.search(message.content)
+    if github_match:
+        user, repo, branch, file_path = github_match.group(1), github_match.group(2), github_match.group(3), github_match.group(4)
+        start_line = int(github_match.group(5))
+        end_line = int(github_match.group(6)) if github_match.group(6) else start_line
+        raw_url = f"https://raw.githubusercontent.com/{user}/{repo}/{branch}/{file_path}"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(raw_url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                    if resp.status == 200:
+                        text = await resp.text()
+                        lines = text.splitlines()
+                        # Clamp to actual file length
+                        start_line = max(1, start_line)
+                        end_line = min(len(lines), end_line)
+                        snippet = '\n'.join(lines[start_line - 1:end_line])
+                        # Determine language for syntax highlighting
+                        ext = os.path.splitext(file_path)[1].lower()
+                        lang = GITHUB_LANG_MAP.get(ext, '')
+                        # Format: file path + line range header
+                        header = f"📄 `{file_path}` (L{start_line}" + (f"-L{end_line})" if start_line != end_line else ")")
+                        code_block = f"{header}\n```{lang}\n{snippet}\n```"
+                        # Discord 2000 char limit check
+                        if len(code_block) > 2000:
+                            code_block = f"{header}\n```{lang}\n{snippet[:1900]}\n... (truncated)\n```"
+                        if len(code_block) <= 2000:
+                            await message.reply(code_block, mention_author=False)
+                        else:
+                            await message.reply(f"{header}\n⚠️ Snippet too large to display.", mention_author=False)
+        except Exception as e:
+            print(f"❌ Failed to fetch GitHub snippet: {e}")
+
+    # ===== UTILITY 5: UNIVERSAL MUSIC LINKER (Odesli API) =====
+    music_match = MUSIC_URL_REGEX.search(message.content)
+    if music_match:
+        music_url = music_match.group(0)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"https://api.song.link/v1-alpha.1/links?url={quote(music_url, safe='')}",
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        page_url = data.get('pageUrl')
+                        if page_url:
+                            await message.reply(f"🎧 Listen on other platforms: {page_url}", mention_author=False)
+        except Exception as e:
+            print(f"❌ Failed to fetch Odesli link: {e}")
+
+    # ===== UTILITY 6: STEAM GAME INSPECTOR =====
+    steam_match = STEAM_URL_REGEX.search(message.content)
+    if steam_match:
+        app_id = steam_match.group(1)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"https://store.steampowered.com/api/appdetails?appids={app_id}",
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        app_data = data.get(str(app_id), {})
+                        if app_data.get('success'):
+                            info = app_data['data']
+                            name = info.get('name', 'Unknown')
+                            price_info = info.get('price_overview')
+                            price = price_info['final_formatted'] if price_info else 'Free / Not Available'
+                            desc = info.get('short_description', 'No description available.')
+                            # Strip any HTML tags from Steam's description
+                            desc = re.sub(r'<[^>]+>', '', desc)
+                            await message.reply(
+                                f"🎮 **{name}**\nPrice: {price}\n{desc}",
+                                mention_author=False
+                            )
+        except Exception as e:
+            print(f"❌ Failed to fetch Steam info: {e}")
+
+    # ===== UTILITY 7: WIKIPEDIA TL;DR FETCHER =====
+    wiki_match = WIKI_URL_REGEX.search(message.content)
+    if wiki_match:
+        title = wiki_match.group(1)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&format=json&redirects=1&titles={title}",
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        pages = data.get('query', {}).get('pages', {})
+                        for page_id, page_data in pages.items():
+                            if page_id == '-1':
+                                break
+                            extract = page_data.get('extract', '')
+                            if extract:
+                                # Truncate to ~450 chars at a sentence boundary
+                                if len(extract) > 450:
+                                    cut = extract[:450].rfind('.')
+                                    extract = extract[:cut + 1] if cut > 200 else extract[:450]
+                                    extract += '...'
+                                await message.reply(
+                                    f"📖 **Wikipedia Summary:**\n{extract}",
+                                    mention_author=False
+                                )
+                            break  # Only process the first page result
+        except Exception as e:
+            print(f"❌ Failed to fetch Wikipedia summary: {e}")
+
+    # ===== UTILITY 8: URL TRACKING PARAMETER STRIPPER =====
+    tracking_match = TRACKING_URL_REGEX.search(message.content)
+    if tracking_match:
+        clean_url = tracking_match.group(1)
+        await message.reply(f"🧹 Clean link without tracking: {clean_url}", mention_author=False)
 
     # ===== EASTER EGG 1: Direct Ping Response =====
     if client.user.mentioned_in(message):
