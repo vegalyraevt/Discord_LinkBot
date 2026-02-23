@@ -62,8 +62,12 @@ The bot includes hidden *Legend of Zelda* references that trigger automatically,
 * **Cucco Reaction:** Discussing chickens or cuccos triggers a flock of poultry reactions.
   * Chicken emoji: 🐔
   * Custom Link emoji: `<:link:1475252964708057118>`
+    
+<img width="229" height="87" alt="Screenshot 2026-02-22 230204" src="https://github.com/user-attachments/assets/f8c23af4-2e26-46ac-9194-f55b8162d8a3" />
 
 * **The Golden Goddesses Reaction:** Discussing the Triforce, courage, wisdom, power, or the Golden Goddesses triggers an animated Triforce reaction: `<a:link_triforce:1475284641513607338>`
+
+<img width="172" height="76" alt="Screenshot 2026-02-22 230222" src="https://github.com/user-attachments/assets/233cba1d-0fb4-4cb5-96dc-9e8918b1b9fa" />
 
 * **Rare Item Drop:** When a link is fixed and sent via webhook, there is a 5% chance the bot appends the classic item get text to the embedded post:
   * `*Da-da-da-daaa!* 🗝️`
