@@ -117,6 +117,11 @@ GITHUB_BLOB_REGEX = re.compile(
     r'https?://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+?)#L(\d+)(?:-L(\d+))?'
 )
 
+# GitHub bare repository URL
+GITHUB_REPO_REGEX = re.compile(
+    r'https?://github\.com/([^/]+)/([^/]+)/?$'
+)
+
 # File extension to Discord syntax highlight language mapping
 GITHUB_LANG_MAP = {
     '.py': 'python', '.js': 'javascript', '.ts': 'typescript', '.jsx': 'jsx',
@@ -264,14 +269,16 @@ async def on_message(message):
     music_match = MUSIC_URL_REGEX.search(message.content)
     if music_match:
         music_url = music_match.group(0)
+        # Strip query parameters to prevent Odesli API issues
+        clean_music_url = music_url.split('?')[0]
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    f"https://api.song.link/v1-alpha.1/links?url={quote(music_url, safe='')}",
+                    f"https://api.song.link/v1-alpha.1/links?url={quote(clean_music_url, safe='')}",
                     timeout=aiohttp.ClientTimeout(total=5)
                 ) as resp:
                     if resp.status == 200:
-                        data = await resp.json()
+                        data = await resp.json(content_type=None)
                         page_url = data.get('pageUrl')
                         if page_url:
                             await message.reply(f"🎧 Listen on other platforms: {page_url}", mention_author=False)
@@ -284,6 +291,7 @@ async def on_message(message):
         app_id = steam_match.group(1)
         try:
             async with aiohttp.ClientSession() as session:
+                # Fetch app details
                 async with session.get(
                     f"https://store.steampowered.com/api/appdetails?appids={app_id}",
                     timeout=aiohttp.ClientTimeout(total=5)
@@ -296,11 +304,28 @@ async def on_message(message):
                             name = info.get('name', 'Unknown')
                             price_info = info.get('price_overview')
                             price = price_info['final_formatted'] if price_info else 'Free / Not Available'
+                            discount_percent = price_info.get('discount_percent', 0) if price_info else 0
+                            discount_str = f"(-{discount_percent}%)" if discount_percent > 0 else ""
                             desc = info.get('short_description', 'No description available.')
                             # Strip any HTML tags from Steam's description
                             desc = re.sub(r'<[^>]+>', '', desc)
+                            
+                            # Fetch review score
+                            review_score = "Not rated"
+                            try:
+                                async with session.get(
+                                    f"https://store.steampowered.com/appreviews/{app_id}?json=1",
+                                    timeout=aiohttp.ClientTimeout(total=5)
+                                ) as review_resp:
+                                    if review_resp.status == 200:
+                                        review_data = await review_resp.json(content_type=None)
+                                        query_summary = review_data.get('query_summary', {})
+                                        review_score = query_summary.get('review_score_desc', 'Not rated')
+                            except Exception as e:
+                                print(f"⚠️ Failed to fetch Steam reviews for app {app_id}: {e}")
+                            
                             await message.reply(
-                                f"🎮 **{name}**\nPrice: {price}\n{desc}",
+                                f"🎮 **{name}**\n💰 Price: {price} {discount_str}\n📈 Reviews: {review_score}\n📝 {desc}",
                                 mention_author=False
                             )
         except Exception as e:
@@ -314,10 +339,11 @@ async def on_message(message):
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     f"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&format=json&redirects=1&titles={title}",
+                    headers={'User-Agent': 'DiscordBot (https://github.com/vegalyraevt/Discord_LinkBot)'},
                     timeout=aiohttp.ClientTimeout(total=5)
                 ) as resp:
                     if resp.status == 200:
-                        data = await resp.json()
+                        data = await resp.json(content_type=None)
                         pages = data.get('query', {}).get('pages', {})
                         for page_id, page_data in pages.items():
                             if page_id == '-1':
@@ -336,6 +362,37 @@ async def on_message(message):
                             break  # Only process the first page result
         except Exception as e:
             print(f"❌ Failed to fetch Wikipedia summary: {e}")
+
+    # ===== UTILITY 7B: GITHUB REPOSITORY INFO =====
+    github_repo_match = GITHUB_REPO_REGEX.search(message.content)
+    if github_repo_match:
+        user, repo = github_repo_match.group(1), github_repo_match.group(2)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"https://api.github.com/repos/{user}/{repo}",
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    if resp.status == 200:
+                        repo_data = await resp.json(content_type=None)
+                        description = repo_data.get('description', 'No description available.')
+                        stars = repo_data.get('stargazers_count', 0)
+                        forks = repo_data.get('forks_count', 0)
+                        language = repo_data.get('language', 'Unknown')
+                        pushed_at = repo_data.get('pushed_at', '')
+                        
+                        # Format the pushed_at timestamp to YYYY-MM-DD
+                        if pushed_at:
+                            last_updated = pushed_at.split('T')[0]
+                        else:
+                            last_updated = 'Never'
+                        
+                        await message.reply(
+                            f"📁 **GitHub Repository: {user}/{repo}**\n⭐ Stars: {stars} | 🍴 Forks: {forks} | 💻 {language} | 📅 Last Updated: {last_updated}\n{description}",
+                            mention_author=False
+                        )
+        except Exception as e:
+            print(f"❌ Failed to fetch GitHub repo info: {e}")
 
     # ===== UTILITY 8: URL TRACKING PARAMETER STRIPPER =====
     tracking_match = TRACKING_URL_REGEX.search(message.content)
