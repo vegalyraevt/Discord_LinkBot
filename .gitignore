@@ -6,6 +6,11 @@ logs/
 images/
 sounds/
 
+# Docker (local setup only)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
 # Environment variables
 .env
 .env.local

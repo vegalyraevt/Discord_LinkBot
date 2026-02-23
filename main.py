@@ -40,9 +40,13 @@ POT_KEYWORDS = r'\b(pot|pots|smash|break|vase|vases|jar|jars|urn|urns|ceramics|p
 # Expanded list for Cuccos/Chickens/Swarm - word boundaries only
 CUCCO_KEYWORDS = r'\b(cucco|cuccos|cuckoo|cuckoos|chicken|chickens|poultry|peck|pecking|flock|kakariko|rooster|cluck|feathers|swarm|revenge)\b'
 
+# Triforce-themed keywords
+TRIFORCE_KEYWORDS = r'\b(wisdom|courage|power|triforce|goddess|goddesses|din|nayru|farore|hylia|sacred realm|master sword|demise)\b'
+
 # Compile regex patterns with word boundaries
 POT_PATTERN = re.compile(POT_KEYWORDS, re.IGNORECASE)
 CUCCO_PATTERN = re.compile(CUCCO_KEYWORDS, re.IGNORECASE)
+TRIFORCE_PATTERN = re.compile(TRIFORCE_KEYWORDS, re.IGNORECASE)
 
 # Construct a regex pattern dynamically from the dictionary keys
 DOMAINS_PATTERN = '|'.join(re.escape(domain) for domain in DOMAIN_MAP.keys())
@@ -94,6 +98,14 @@ async def on_message(message):
             # React with two chicken emojis
             await message.add_reaction('🐔')
             await message.add_reaction('<:link:1475252964708057118>')
+        except discord.errors.HTTPException:
+            pass  # Ignore permission or connection errors
+
+    # ===== EASTER EGG 2C: Triforce Reaction =====
+    if TRIFORCE_PATTERN.search(message.content):
+        try:
+            # React with animated Triforce emoji
+            await message.add_reaction('<a:link_triforce:1475284641513607338>')
         except discord.errors.HTTPException:
             pass  # Ignore permission or connection errors
 
