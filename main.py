@@ -51,7 +51,7 @@ CUCCO_PATTERN = re.compile(CUCCO_KEYWORDS, re.IGNORECASE)
 TRIFORCE_PATTERN = re.compile(TRIFORCE_KEYWORDS, re.IGNORECASE)
 
 # General URL regex for security and utility checks
-GENERAL_URL_REGEX = re.compile(r'https?://(?:www\.)?([^/\s]+)(/[^\s]*)?')
+GENERAL_URL_REGEX = re.compile(r'https?://(?:www\.)?([^/\s]+)(/[^\s]*[^\s\)\]>.,!?])?')
 
 # Known URL shortener domains
 SHORTENER_DOMAINS = {
@@ -99,7 +99,7 @@ async def on_message(message):
     # ===== UTILITY 1: SCAM / PHISHING PROTECTION (SinkingYachts API) =====
     # Runs first - nukes malicious links before anything else touches the message
     url_matches = GENERAL_URL_REGEX.findall(message.content)
-    for raw_url in re.findall(r'https?://[^\s]+', message.content):
+    for raw_url in re.findall(r'https?://[^\s\)\]>]+', message.content):
         hostname = urlparse(raw_url).hostname
         if not hostname:
             continue
