@@ -2,13 +2,17 @@ import discord
 import re
 import os
 import random
+import asyncio
 import aiohttp
 from datetime import datetime
-from urllib.parse import urlparse, quote
+from urllib.parse import urlparse, quote, unquote
 from dotenv import load_dotenv
+from bs4 import BeautifulSoup
 
 # Load environment variables from .env file
 load_dotenv()
+
+OMDB_API_KEY = os.getenv('OMDB_API_KEY', '')
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -22,7 +26,10 @@ DOMAIN_MAP = {
     'tiktok.com': 'tnktok.com',
     'instagram.com': 'uuinstagram.com',
     'reddit.com': 'rxddit.com',
-    'pixiv.net': 'phixiv.net'
+    'pixiv.net': 'phixiv.net',
+    'bsky.app': 'bskyx.app',
+    'threads.net': 'vxthreads.net',
+    'threads.com': 'vxthreads.net',
 }
 
 # Backup proxy domains if primary ones fail (for future use)
@@ -151,16 +158,41 @@ STEAM_URL_REGEX = re.compile(
     r'https?://store\.steampowered\.com/app/(\d+)'
 )
 
+# Steam developer/publisher search URL
+STEAM_DEV_REGEX = re.compile(
+    r'https?://store\.steampowered\.com/search/[^?\s]*\?[^\s\)\]>]*?\b(developer|publisher)=([^&\s\)\]>]+)'
+)
+
 # Wikipedia article URL
 WIKI_URL_REGEX = re.compile(
     r'https?://en\.wikipedia\.org/wiki/([^\s\)\]>#?]+)'
 )
 
+# YouTube Shorts URL
+YOUTUBE_SHORTS_REGEX = re.compile(
+    r'https?://(?:www\.)?youtube\.com/shorts/([^/?\s]+)'
+)
+
+# Discord message link
+DISCORD_MSG_REGEX = re.compile(
+    r'https?://(?:ptb\.|canary\.)?discord\.com/channels/(\d+)/(\d+)/(\d+)'
+)
+
+# Amazon product URL (any TLD)
+AMAZON_URL_REGEX = re.compile(
+    r'https?://(?:www\.)?amazon\.[a-z.]{2,6}/(?:[^\s]*?/)?(?:dp|gp/product)/([A-Z0-9]{10})[^\s\)\]>]*'
+)
+
+# IMDb title URL
+IMDB_URL_REGEX = re.compile(
+    r'https?://(?:www\.)?imdb\.com/title/(tt\d+)'
+)
+
 # Domains notorious for tracking parameters
+# NOTE: Do NOT include domains that are in DOMAIN_MAP (embed-fixed sites like tiktok, instagram, twitter, x)
+# Those are handled by the embed fixer and should never hit the tracking stripper.
 TRACKING_DOMAINS = {
-    'amazon.com', 'amazon.co.uk', 'amazon.ca', 'amazon.de', 'amazon.co.jp',
-    'twitter.com', 'x.com', 'tiktok.com', 'facebook.com', 'instagram.com',
-    'youtube.com', 'youtu.be', 'aliexpress.com', 'ebay.com',
+    'facebook.com', 'youtube.com', 'youtu.be', 'aliexpress.com', 'ebay.com',
 }
 TRACKING_URL_REGEX = re.compile(
     r'(https?://(?:www\.)?(?:' +
@@ -372,6 +404,21 @@ async def on_message(message):
                             except Exception as e:
                                 print(f"❌ Failed to fetch CheapShark data for app {app_id}: {e}")
 
+                            # Fetch current player count
+                            current_players_str = "N/A"
+                            try:
+                                async with session.get(
+                                    f"https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid={app_id}",
+                                    timeout=aiohttp.ClientTimeout(total=5)
+                                ) as players_resp:
+                                    if players_resp.status == 200:
+                                        players_data = await players_resp.json(content_type=None)
+                                        if players_data.get('response', {}).get('result') == 1:
+                                            player_count = players_data['response']['player_count']
+                                            current_players_str = f"{player_count:,}"
+                            except Exception as e:
+                                print(f"⚠️ Failed to fetch player count for app {app_id}: {e}")
+
                             embed = discord.Embed(
                                 title=name,
                                 description=desc,
@@ -383,7 +430,8 @@ async def on_message(message):
                             embed.add_field(name="📉 Historical Low", value=historical_text, inline=True)
                             embed.add_field(name="📈 Reviews", value=review_score, inline=True)
                             embed.add_field(name="🎯 Metacritic", value=metacritic_score, inline=True)
-                            embed.add_field(name="� Recommendations", value=recommendations, inline=True)
+                            embed.add_field(name="👍 Recommendations", value=recommendations, inline=True)
+                            embed.add_field(name="🎮 Current Players", value=current_players_str, inline=True)
                             embed.add_field(name="🏷️ Genres", value=genres, inline=True)
                             embed.add_field(name="🧑‍💻 Developer", value=developers, inline=True)
                             embed.add_field(name="📅 Release Date", value=release_date, inline=True)
@@ -396,6 +444,103 @@ async def on_message(message):
                                 pass
         except Exception as e:
             print(f"❌ Failed to fetch Steam info: {e}")
+
+    # ===== UTILITY 6B: STEAM DEVELOPER / PUBLISHER INSPECTOR =====
+    steam_dev_match = STEAM_DEV_REGEX.search(message.content)
+    if steam_dev_match:
+        search_type = steam_dev_match.group(1)       # 'developer' or 'publisher'
+        search_name = steam_dev_match.group(2)       # URL-encoded name
+        display_name = unquote(search_name)          # Human-readable name
+        original_url = steam_dev_match.group(0)
+
+        async def fetch_game_embed(session, app_id):
+            try:
+                details_req = session.get(
+                    f"https://store.steampowered.com/api/appdetails?appids={app_id}",
+                    timeout=aiohttp.ClientTimeout(total=5)
+                )
+                reviews_req = session.get(
+                    f"https://store.steampowered.com/appreviews/{app_id}?json=1",
+                    timeout=aiohttp.ClientTimeout(total=5)
+                )
+                async with details_req as dr, reviews_req as rr:
+                    details_data = await dr.json(content_type=None)
+                    reviews_data = await rr.json(content_type=None)
+
+                app_info = details_data.get(str(app_id), {})
+                if not app_info.get('success'):
+                    return None
+                data = app_info.get('data', {})
+
+                name         = data.get('name', 'Unknown')
+                header_image = data.get('header_image', '')
+                price_obj    = data.get('price_overview')
+                if price_obj:
+                    price = price_obj.get('final_formatted', 'N/A')
+                elif data.get('is_free'):
+                    price = 'Free'
+                else:
+                    price = 'N/A'
+
+                review_desc = (
+                    reviews_data.get('query_summary', {}).get('review_score_desc', 'N/A')
+                )
+
+                embed = discord.Embed(
+                    title=name,
+                    url=f"https://store.steampowered.com/app/{app_id}",
+                    color=discord.Color.blue()
+                )
+                if header_image:
+                    embed.set_thumbnail(url=header_image)
+                embed.add_field(name="💰 Price",   value=price,       inline=True)
+                embed.add_field(name="📈 Reviews", value=review_desc, inline=True)
+                return embed
+            except Exception as e:
+                print(f"❌ fetch_game_embed({app_id}): {e}")
+                return None
+
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0',
+                'Referer': 'https://store.steampowered.com/'
+            }
+            async with aiohttp.ClientSession(headers=headers) as session:
+                async with session.get(
+                    f"https://store.steampowered.com/search/results/?{search_type}={search_name}&json=1&start=0&count=10&l=english&cc=US",
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        items = data.get('items', [])
+
+                        # Extract app IDs from the logo URLs, e.g. /steam/apps/250900/
+                        app_ids = []
+                        for item in items:
+                            logo = item.get('logo', '')
+                            m = re.search(r'/steam/apps/(\d+)/', logo)
+                            if m:
+                                app_ids.append(m.group(1))
+                        top_app_ids = list(dict.fromkeys(app_ids))[:5]
+
+                        if top_app_ids:
+                            embeds_list = await asyncio.gather(
+                                *[fetch_game_embed(session, aid) for aid in top_app_ids]
+                            )
+                            embeds_list = [e for e in embeds_list if e is not None]
+
+                        if embeds_list:
+                            await message.reply(
+                                content=f"🎮 **Top games by {display_name}:**",
+                                embeds=embeds_list,
+                                mention_author=False
+                            )
+                            try:
+                                await message.edit(suppress=True)
+                            except discord.Forbidden:
+                                pass
+        except Exception as e:
+            print(f"❌ Failed to fetch Steam dev/publisher info: {e}")
 
     # ===== UTILITY 7: WIKIPEDIA TL;DR FETCHER =====
     wiki_match = WIKI_URL_REGEX.search(message.content)
@@ -528,6 +673,112 @@ async def on_message(message):
         except Exception as e:
             print(f"❌ Failed to fetch GitHub user profile: {e}")
 
+    # ===== UTILITY 9: DISCORD MESSAGE LINK QUOTING =====
+    discord_msg_match = DISCORD_MSG_REGEX.search(message.content)
+    if discord_msg_match:
+        guild_id   = discord_msg_match.group(1)
+        channel_id = discord_msg_match.group(2)
+        message_id = discord_msg_match.group(3)
+        original_url = discord_msg_match.group(0)
+        try:
+            guild = client.get_guild(int(guild_id))
+            channel = guild.get_channel(int(channel_id)) if guild else None
+            target_message = await channel.fetch_message(int(message_id))
+            embed = discord.Embed(
+                description=target_message.content or '*No text content*',
+                color=discord.Color.dark_theme()
+            )
+            embed.set_author(
+                name=target_message.author.display_name,
+                icon_url=target_message.author.display_avatar.url
+            )
+            embed.add_field(
+                name='\u200b',
+                value=f"[Jump to original message]({original_url})",
+                inline=False
+            )
+            if target_message.attachments:
+                embed.set_image(url=target_message.attachments[0].url)
+            await message.reply(embed=embed, mention_author=False)
+        except (discord.NotFound, discord.Forbidden, AttributeError):
+            pass
+
+    # ===== UTILITY 10: AMAZON PRODUCT EMBED =====
+    amazon_match = AMAZON_URL_REGEX.search(message.content)
+    if amazon_match:
+        amazon_url = amazon_match.group(0).split('?')[0]  # strip tracking params
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    amazon_url,
+                    headers={
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    },
+                    timeout=aiohttp.ClientTimeout(total=8)
+                ) as resp:
+                    if resp.status == 200:
+                        html = await resp.text()
+                        soup = BeautifulSoup(html, 'html.parser')
+                        og_title = soup.find('meta', property='og:title')
+                        og_image = soup.find('meta', property='og:image')
+                        product_title = (og_title['content'] if og_title else None) or (soup.title.string if soup.title else None)
+                        product_image = og_image['content'] if og_image else None
+                        if product_title:
+                            embed = discord.Embed(
+                                title=product_title.strip(),
+                                url=amazon_url,
+                                color=discord.Color.orange()
+                            )
+                            if product_image:
+                                embed.set_thumbnail(url=product_image)
+                            await message.reply(embed=embed, mention_author=False)
+                            try:
+                                await message.edit(suppress=True)
+                            except (discord.Forbidden, discord.HTTPException):
+                                pass
+        except Exception as e:
+            print(f"❌ Failed to fetch Amazon product info: {e}")
+
+    # ===== UTILITY 11: IMDB MOVIE INSPECTOR =====
+    imdb_match = IMDB_URL_REGEX.search(message.content)
+    if imdb_match and OMDB_API_KEY:
+        imdb_id = imdb_match.group(1)
+        original_url = imdb_match.group(0)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"https://www.omdbapi.com/?i={imdb_id}&apikey={OMDB_API_KEY}",
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        if data.get('Response') == 'True':
+                            title       = data.get('Title', 'Unknown')
+                            year        = data.get('Year', '?')
+                            plot        = data.get('Plot', 'No plot available.')
+                            poster      = data.get('Poster', '')
+                            imdb_rating = data.get('imdbRating', 'N/A')
+                            rated       = data.get('Rated', 'N/A')
+                            embed = discord.Embed(
+                                title=f"{title} ({year})",
+                                description=plot,
+                                url=original_url,
+                                color=discord.Color.gold()
+                            )
+                            embed.add_field(name="⭐ IMDb Rating", value=imdb_rating, inline=True)
+                            embed.add_field(name="🔞 Age Rating",  value=rated,       inline=True)
+                            if poster and poster != 'N/A':
+                                embed.set_thumbnail(url=poster)
+                            await message.reply(embed=embed, mention_author=False)
+                            try:
+                                await message.edit(suppress=True)
+                            except (discord.Forbidden, discord.HTTPException):
+                                pass
+        except Exception as e:
+            print(f"❌ Failed to fetch IMDb info: {e}")
+
     # ===== UTILITY 8: URL TRACKING PARAMETER STRIPPER =====
     tracking_match = TRACKING_URL_REGEX.search(message.content)
     if tracking_match:
@@ -590,9 +841,17 @@ async def on_message(message):
     # ===== LINK FIXING LOGIC =====
     try:
         matches = list(URL_REGEX.finditer(message.content))
+        shorts_match = YOUTUBE_SHORTS_REGEX.search(message.content)
 
-        if matches:
+        if matches or shorts_match:
             fixed_content = message.content
+
+            # ===== YOUTUBE SHORTS CONVERTER =====
+            if shorts_match:
+                fixed_content = YOUTUBE_SHORTS_REGEX.sub(
+                    lambda m: f"https://www.youtube.com/watch?v={m.group(1)}",
+                    fixed_content
+                )
 
             for match in matches:
                 matched_domain = match.group(1)
