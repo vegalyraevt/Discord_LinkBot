@@ -46,6 +46,11 @@ The bot includes hidden *Legend of Zelda* references that trigger automatically,
   * **10% chance:** A random sound from the `sounds/` folder.
   *(Note: To use the media responses, place `.png`, `.jpg`, and `.gif` files in the `images/` folder, and `.mp3`, `.wav`, and `.ogg` files in the `sounds/` folder.)*
 
+  <img width="727" height="452" alt="Screenshot 2026-02-22 225851" src="https://github.com/user-attachments/assets/66cbe57c-905b-42f9-a226-7eb009e49546" />
+
+  <img width="501" height="240" alt="Screenshot 2026-02-22 225953" src="https://github.com/user-attachments/assets/a70b0bca-2d05-4ea3-b14f-5d77a3abfef4" />
+
+
 * **Pot Reaction:** If a message contains keywords related to pots, vandalism, or theft, the bot reacts with:
   * Custom Link emoji: `<:link:1475252964708057118>`
   * Custom Pot emoji: `<:pot:1475279632512188718>`
