@@ -3,6 +3,7 @@ import re
 import os
 import random
 import aiohttp
+from datetime import datetime
 from urllib.parse import urlparse, quote
 from dotenv import load_dotenv
 
@@ -120,6 +121,11 @@ GITHUB_BLOB_REGEX = re.compile(
 # GitHub bare repository URL
 GITHUB_REPO_REGEX = re.compile(
     r'https?://github\.com/([^/]+)/([^/]+)/?$'
+)
+
+# GitHub user profile URL (must be checked before repo regex - fewer path segments)
+GITHUB_USER_REGEX = re.compile(
+    r'https?://github\.com/([^/]+)/?$'
 )
 
 # File extension to Discord syntax highlight language mapping
@@ -303,13 +309,19 @@ async def on_message(message):
                             info = app_data['data']
                             name = info.get('name', 'Unknown')
                             price_info = info.get('price_overview')
-                            price = price_info['final_formatted'] if price_info else 'Free / Not Available'
+                            steam_price_display = price_info['final_formatted'] if price_info else 'Free'
+                            steam_price = (price_info.get('final', 0) / 100) if price_info else 0.0
                             discount_percent = price_info.get('discount_percent', 0) if price_info else 0
-                            discount_str = f"(-{discount_percent}%)" if discount_percent > 0 else ""
+                            steam_price_str = f"{steam_price_display}" + (f" (-{discount_percent}%)" if discount_percent > 0 else "")
                             desc = info.get('short_description', 'No description available.')
-                            # Strip any HTML tags from Steam's description
                             desc = re.sub(r'<[^>]+>', '', desc)
-                            
+                            header_image = info.get('header_image', '')
+                            developers = ', '.join(info.get('developers', [])) or 'Unknown'
+                            release_date = info.get('release_date', {}).get('date', 'Unknown')
+                            metacritic_score = str(info.get('metacritic', {}).get('score', 'N/A'))
+                            recommendations = f"{info.get('recommendations', {}).get('total', 'N/A'):,}" if info.get('recommendations') else 'N/A'
+                            genres = ', '.join(g['description'] for g in info.get('genres', [])) or 'N/A'
+
                             # Fetch review score
                             review_score = "Not rated"
                             try:
@@ -323,11 +335,65 @@ async def on_message(message):
                                         review_score = query_summary.get('review_score_desc', 'Not rated')
                             except Exception as e:
                                 print(f"⚠️ Failed to fetch Steam reviews for app {app_id}: {e}")
-                            
-                            await message.reply(
-                                f"🎮 **{name}**\n💰 Price: {price} {discount_str}\n📈 Reviews: {review_score}\n📝 {desc}",
-                                mention_author=False
+
+                            # CheapShark: Step 1 - Get gameID and current best price
+                            best_deal_text = "N/A"
+                            historical_text = "N/A"
+                            try:
+                                async with session.get(
+                                    f"https://www.cheapshark.com/api/1.0/games?steamAppID={app_id}",
+                                    timeout=aiohttp.ClientTimeout(total=5)
+                                ) as cs_resp:
+                                    game_id = None
+                                    if cs_resp.status == 200:
+                                        cs_data = await cs_resp.json(content_type=None)
+                                        if cs_data and len(cs_data) > 0:
+                                            game_id = cs_data[0].get('gameID')
+                                            cheapest_current = float(cs_data[0].get('cheapest', 0))
+                                            deal_id = cs_data[0].get('cheapestDealID')
+                                            if cheapest_current > 0 and cheapest_current < steam_price:
+                                                best_deal_text = f"⚠️ [Cheaper elsewhere for ${cheapest_current:.2f}](https://www.cheapshark.com/redirect?dealID={deal_id})"
+                                            else:
+                                                best_deal_text = "✅ Steam is currently the best price."
+
+                                    # CheapShark: Step 2 - Get historical low using internal gameID
+                                    if game_id:
+                                        async with session.get(
+                                            f"https://www.cheapshark.com/api/1.0/games?id={game_id}",
+                                            timeout=aiohttp.ClientTimeout(total=5)
+                                        ) as cs_detail_resp:
+                                            if cs_detail_resp.status == 200:
+                                                cs_detail = await cs_detail_resp.json(content_type=None)
+                                                cheapest_ever = cs_detail.get('cheapestPriceEver', {})
+                                                lowest_price = cheapest_ever.get('price')
+                                                lowest_date = cheapest_ever.get('date')
+                                                if lowest_price is not None and lowest_date:
+                                                    historical_text = f"${lowest_price} (Hit on <t:{lowest_date}:d>)"
+                            except Exception as e:
+                                print(f"❌ Failed to fetch CheapShark data for app {app_id}: {e}")
+
+                            embed = discord.Embed(
+                                title=name,
+                                description=desc,
+                                color=discord.Color.blue(),
+                                url=f"https://store.steampowered.com/app/{app_id}"
                             )
+                            embed.add_field(name="💰 Steam Price", value=steam_price_str, inline=True)
+                            embed.add_field(name="🏷️ Best Current Deal", value=best_deal_text, inline=True)
+                            embed.add_field(name="📉 Historical Low", value=historical_text, inline=True)
+                            embed.add_field(name="📈 Reviews", value=review_score, inline=True)
+                            embed.add_field(name="🎯 Metacritic", value=metacritic_score, inline=True)
+                            embed.add_field(name="� Recommendations", value=recommendations, inline=True)
+                            embed.add_field(name="🏷️ Genres", value=genres, inline=True)
+                            embed.add_field(name="🧑‍💻 Developer", value=developers, inline=True)
+                            embed.add_field(name="📅 Release Date", value=release_date, inline=True)
+                            if header_image:
+                                embed.set_image(url=header_image)
+                            await message.reply(embed=embed, mention_author=False)
+                            try:
+                                await message.edit(suppress=True)
+                            except (discord.Forbidden, discord.HTTPException):
+                                pass
         except Exception as e:
             print(f"❌ Failed to fetch Steam info: {e}")
 
@@ -338,28 +404,44 @@ async def on_message(message):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    f"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&format=json&redirects=1&titles={title}",
+                    f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}",
                     headers={'User-Agent': 'DiscordBot (https://github.com/vegalyraevt/Discord_LinkBot)'},
                     timeout=aiohttp.ClientTimeout(total=5)
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json(content_type=None)
-                        pages = data.get('query', {}).get('pages', {})
-                        for page_id, page_data in pages.items():
-                            if page_id == '-1':
-                                break
-                            extract = page_data.get('extract', '')
-                            if extract:
-                                # Truncate to ~450 chars at a sentence boundary
-                                if len(extract) > 450:
-                                    cut = extract[:450].rfind('.')
-                                    extract = extract[:cut + 1] if cut > 200 else extract[:450]
-                                    extract += '...'
-                                await message.reply(
-                                    f"📖 **Wikipedia Summary:**\n{extract}",
-                                    mention_author=False
-                                )
-                            break  # Only process the first page result
+                        page_title = data.get('title', title.replace('_', ' '))
+                        description = data.get('description', '')
+                        extract = data.get('extract', '')
+                        article_url = data.get('content_urls', {}).get('desktop', {}).get('page', f"https://en.wikipedia.org/wiki/{title}")
+                        thumbnail_source = data.get('thumbnail', {}).get('source')
+
+                        if extract:
+                            # Build description: italic subtitle + summary text
+                            desc_parts = []
+                            if description:
+                                desc_parts.append(f"*{description}*")
+                            desc_parts.append(extract)
+                            full_description = '\n\n'.join(desc_parts)
+                            # Discord embed description limit is 4096 chars
+                            if len(full_description) > 4096:
+                                full_description = full_description[:4090] + '...'
+
+                            embed = discord.Embed(
+                                title=page_title,
+                                description=full_description,
+                                color=discord.Color.light_gray(),
+                                url=article_url
+                            )
+                            if thumbnail_source:
+                                embed.set_thumbnail(url=thumbnail_source)
+                            embed.set_footer(text="Wikipedia")
+                            await message.reply(embed=embed, mention_author=False)
+                            # Suppress Discord's default link preview if we have permission
+                            try:
+                                await message.edit(suppress=True)
+                            except (discord.Forbidden, discord.HTTPException):
+                                pass
         except Exception as e:
             print(f"❌ Failed to fetch Wikipedia summary: {e}")
 
@@ -375,24 +457,76 @@ async def on_message(message):
                 ) as resp:
                     if resp.status == 200:
                         repo_data = await resp.json(content_type=None)
-                        description = repo_data.get('description', 'No description available.')
+                        description = repo_data.get('description') or 'No description available.'
                         stars = repo_data.get('stargazers_count', 0)
                         forks = repo_data.get('forks_count', 0)
-                        language = repo_data.get('language', 'Unknown')
+                        language = repo_data.get('language') or 'Unknown'
                         pushed_at = repo_data.get('pushed_at', '')
-                        
-                        # Format the pushed_at timestamp to YYYY-MM-DD
-                        if pushed_at:
-                            last_updated = pushed_at.split('T')[0]
-                        else:
-                            last_updated = 'Never'
-                        
-                        await message.reply(
-                            f"📁 **GitHub Repository: {user}/{repo}**\n⭐ Stars: {stars} | 🍴 Forks: {forks} | 💻 {language} | 📅 Last Updated: {last_updated}\n{description}",
-                            mention_author=False
+                        repo_url = repo_data.get('html_url', f"https://github.com/{user}/{repo}")
+                        last_updated = pushed_at.split('T')[0] if pushed_at else 'Never'
+
+                        embed = discord.Embed(
+                            title=f"📁 {user}/{repo}",
+                            description=description,
+                            color=discord.Color.dark_theme(),
+                            url=repo_url
                         )
+                        embed.add_field(name="⭐ Stars", value=str(stars), inline=True)
+                        embed.add_field(name="🍴 Forks", value=str(forks), inline=True)
+                        embed.add_field(name="💻 Language", value=language, inline=True)
+                        embed.add_field(name="📅 Last Updated", value=last_updated, inline=True)
+                        embed.set_footer(text="GitHub")
+                        await message.reply(embed=embed, mention_author=False)
         except Exception as e:
             print(f"❌ Failed to fetch GitHub repo info: {e}")
+
+    # ===== UTILITY 7C: GITHUB USER PROFILE =====
+    # Must be checked AFTER blob and repo — it matches any single-segment GitHub URL
+    github_user_match = GITHUB_USER_REGEX.search(message.content)
+    if github_user_match:
+        username = github_user_match.group(1)
+        profile_url = f"https://github.com/{username}"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"https://api.github.com/users/{username}",
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    if resp.status == 200:
+                        user_data = await resp.json(content_type=None)
+                        avatar_url = user_data.get('avatar_url', '')
+                        display_name = user_data.get('name') or username
+                        bio = user_data.get('bio') or 'No bio available.'
+                        public_repos = user_data.get('public_repos', 0)
+                        followers = user_data.get('followers', 0)
+
+                        # Fetch 3 most recently pushed repos
+                        recent_repos_str = 'N/A'
+                        async with session.get(
+                            f"https://api.github.com/users/{username}/repos?sort=pushed&per_page=3",
+                            timeout=aiohttp.ClientTimeout(total=5)
+                        ) as repos_resp:
+                            if repos_resp.status == 200:
+                                repos_data = await repos_resp.json(content_type=None)
+                                recent_repos_str = '\n'.join(
+                                    f"`{r['name']}`" for r in repos_data
+                                ) or 'No public repos.'
+
+                        embed = discord.Embed(
+                            title=f"GitHub: {display_name}",
+                            description=bio,
+                            color=discord.Color.dark_theme(),
+                            url=profile_url
+                        )
+                        if avatar_url:
+                            embed.set_thumbnail(url=avatar_url)
+                        embed.add_field(name="👥 Followers", value=str(followers), inline=True)
+                        embed.add_field(name="📦 Public Repos", value=str(public_repos), inline=True)
+                        embed.add_field(name="🕐 Recent Activity", value=recent_repos_str, inline=False)
+                        embed.set_footer(text="GitHub")
+                        await message.reply(embed=embed, mention_author=False)
+        except Exception as e:
+            print(f"❌ Failed to fetch GitHub user profile: {e}")
 
     # ===== UTILITY 8: URL TRACKING PARAMETER STRIPPER =====
     tracking_match = TRACKING_URL_REGEX.search(message.content)
