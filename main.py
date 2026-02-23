@@ -34,6 +34,16 @@ ZELDA_TEXT_RESPONSES = [
     "It's dangerous to go alone! Take this. ⚔️ <:link:1475252964708057118>"
 ]
 
+# Expanded list for Pots/Crime/Destruction - word boundaries only
+POT_KEYWORDS = r'\b(pot|pots|smash|break|vase|vases|jar|jars|urn|urns|ceramics|pottery|link|links|rupee|rupees|money|burglary|theft|vandalism|vandalize|steal|stealing|thief|rob|robbery|loot|looting|crime|shatter|trespass|trespassing|crash|destroy|destruction|ransack|pillage)\b'
+
+# Expanded list for Cuccos/Chickens/Swarm - word boundaries only
+CUCCO_KEYWORDS = r'\b(cucco|cuccos|cuckoo|cuckoos|chicken|chickens|poultry|peck|pecking|flock|kakariko|rooster|cluck|feathers|swarm|revenge)\b'
+
+# Compile regex patterns with word boundaries
+POT_PATTERN = re.compile(POT_KEYWORDS, re.IGNORECASE)
+CUCCO_PATTERN = re.compile(CUCCO_KEYWORDS, re.IGNORECASE)
+
 # Construct a regex pattern dynamically from the dictionary keys
 DOMAINS_PATTERN = '|'.join(re.escape(domain) for domain in DOMAIN_MAP.keys())
 URL_REGEX = re.compile(rf'https?://(?:www\.)?({DOMAINS_PATTERN})(/[^\s]*)')
@@ -70,12 +80,20 @@ async def on_message(message):
             await message.channel.send(random.choice(ZELDA_TEXT_RESPONSES))
 
     # ===== EASTER EGG 2: Pot Reaction =====
-    message_lower = message.content.lower()
-    if any(word in message_lower for word in ['pot', 'pots', 'smash', 'break', 'vase', 'link', 'links', 'rupees', 'rupee']):
+    if POT_PATTERN.search(message.content):
         try:
             # React with custom Link emoji and custom Pot emoji
             await message.add_reaction('<:link:1475252964708057118>')
             await message.add_reaction('<:pot:1475279632512188718>')
+        except discord.errors.HTTPException:
+            pass  # Ignore permission or connection errors
+
+    # ===== EASTER EGG 2B: Cucco/Chicken Reaction =====
+    if CUCCO_PATTERN.search(message.content):
+        try:
+            # React with two chicken emojis
+            await message.add_reaction('🐔')
+            await message.add_reaction('<:link:1475252964708057118>')
         except discord.errors.HTTPException:
             pass  # Ignore permission or connection errors
 

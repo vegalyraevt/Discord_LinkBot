@@ -1,9 +1,18 @@
 # LinkBot - Discord Embed Fixer
 
 A Discord bot that automatically fixes broke### 2. Pot Reaction
-Message contains "pot", "pots", or "smash"? The bot reacts with:
+Message contains pot/destruction keywords like "pot", "smash", "rupee", "steal", "crime", etc.? The bot reacts with:
 - Custom Link emoji: `<:link:1475252964708057118>`
-- Custom Pot emoji: `<:pot:1475279632512188718>`cial media embeds by replacing domain names with embed-friendly alternatives.
+- Custom Pot emoji: `<:pot:1475279632512188718>`
+
+**Triggers:** pot, pots, smash, break, vase, vases, jar, jars, urn, urns, ceramics, pottery, link, links, rupee, rupees, money, burglary, theft, vandalism, vandalize, steal, stealing, thief, rob, robbery, loot, looting, crime, shatter, trespass, trespassing, crash, destroy, destruction, ransack, pillage
+
+### 2B. Cucco Reaction
+Message contains chicken/cucco keywords like "chicken", "cucco", "peck", "flock", "swarm", "revenge", etc.? The bot reacts with:
+- Chicken emoji: 🐔
+- Custom Link emoji: `<:link:1475252964708057118>`
+
+**Triggers:** cucco, cuccos, cuckoo, cuckoos, chicken, chickens, poultry, peck, pecking, flock, kakariko, rooster, cluck, feathers, swarm, revengecial media embeds by replacing domain names with embed-friendly alternatives.
 
 ## Invite me!
 [Discord Invite Link](https://discord.com/oauth2/authorize?client_id=1475244291944218715&permissions=2322581411986432&integration_type=0&scope=bot)
