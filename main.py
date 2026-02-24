@@ -6,7 +6,7 @@ import asyncio
 import aiohttp
 import json as _json
 from datetime import datetime
-from urllib.parse import urlparse, quote, unquote
+from urllib.parse import urlparse, quote, unquote, parse_qsl, urlencode
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 
@@ -219,17 +219,21 @@ IMDB_URL_REGEX = re.compile(
 # Domains notorious for tracking parameters
 # NOTE: Do NOT include domains that are in DOMAIN_MAP (embed-fixed sites like tiktok, instagram, twitter, x)
 # Those are handled by the embed fixer and should never hit the tracking stripper.
-# NOTE: youtube.com and youtu.be are intentionally excluded — YouTube Shorts are handled by the
-# link fixer (which naturally strips all params), and regular YouTube watch URLs don't need a bot
-# reply because Discord already embeds them natively. Adding them here caused duplicate replies.
 TRACKING_DOMAINS = {
-    'facebook.com', 'aliexpress.com', 'ebay.com',
+    'facebook.com', 'youtube.com', 'youtu.be', 'aliexpress.com', 'ebay.com',
 }
 TRACKING_URL_REGEX = re.compile(
-    r'(https?://(?:www\.)?(?:' +
+    r'https?://(?:www\.)?(?:' +
     '|'.join(re.escape(d) for d in TRACKING_DOMAINS) +
-    r')/[^\s\)\]>?]*)\?[^\s\)\]>]+'
+    r')/[^\s\)\]>]+'
 )
+
+# Query params that are pure tracking noise — strip these, keep everything else
+TRACKING_PARAMS = {
+    'si', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+    'utm_id', 'utm_name', 'fbclid', 'igshid', 'ref', 'referrer', 'feature',
+    'pp', 'ab_channel',
+}
 
 # Construct a regex pattern dynamically from the dictionary keys
 DOMAINS_PATTERN = '|'.join(re.escape(domain) for domain in DOMAIN_MAP.keys())
@@ -908,22 +912,33 @@ async def on_message(message):
                 print(f"❌ Failed to fetch IMDb info: {e}")
 
     # ===== UTILITY 8: URL TRACKING PARAMETER STRIPPER =====
-    # Only fires if the URL isn't already handled by the link fixer (DOMAIN_MAP) or Shorts converter,
-    # to avoid sending a standalone reply alongside another utility's existing reply.
+    # Strips known tracking-only params (si, utm_*, fbclid, etc.) while keeping
+    # functional params like v= on YouTube. Only fires if the URL isn't already
+    # handled by the Shorts converter (which replaces the whole URL anyway).
     tracking_match = TRACKING_URL_REGEX.search(message.content)
     if tracking_match:
-        # Skip if the matched URL's domain is in DOMAIN_MAP (embed fixer handles those)
-        # or if there's a YouTube Shorts URL in the message (link fixer handles those)
-        tracking_url = tracking_match.group(0)
-        tracking_hostname = urlparse(tracking_url).hostname or ''
+        raw_tracking_url = tracking_match.group(0)
+        tracking_hostname = urlparse(raw_tracking_url).hostname or ''
         tracking_base = tracking_hostname.removeprefix('www.')
-        already_handled = (
-            tracking_base in DOMAIN_MAP
-            or YOUTUBE_SHORTS_REGEX.search(message.content) is not None
-        )
+
+        # Shorts are handled by the link fixer webhook — skip to avoid duplicate reply
+        already_handled = YOUTUBE_SHORTS_REGEX.search(message.content) is not None
+
         if not already_handled:
-            clean_url = tracking_match.group(1)
-            await message.reply(f"🧹 Clean link without tracking: {clean_url}", mention_author=False)
+            parsed = urlparse(raw_tracking_url)
+            # Parse and filter query params — drop pure tracking ones, keep the rest
+            kept = [(k, v) for k, v in parse_qsl(parsed.query) if k.lower() not in TRACKING_PARAMS]
+            stripped_query = urlencode(kept)
+            clean_parsed = parsed._replace(query=stripped_query, fragment='')
+            clean_url = clean_parsed.geturl()
+
+            # Only reply if we actually removed something
+            if clean_url.rstrip('/') != raw_tracking_url.rstrip('/'):
+                await message.reply(f"🧹 Clean link without tracking: {clean_url}", mention_author=False)
+                try:
+                    await message.edit(suppress=True)
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
 
     # ===== EASTER EGG 1: Direct Ping Response =====
     if client.user.mentioned_in(message):
