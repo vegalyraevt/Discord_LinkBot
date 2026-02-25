@@ -124,7 +124,7 @@ SHORTENER_DOMAINS = {
     'bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'is.gd', 'buff.ly',
     'j.mp', 'cutt.ly', 'rb.gy', 'shrtco.de', 'v.gd', 'bl.ink', 't2m.io',
     'qr.ae', 'snip.ly', 'clk.im', 'rebrand.ly', 'short.gy', 'cutt.us',
-    'soo.gd', 's.id', 'adf.ly', 'lnkd.in', 'amzn.to', 'youtu.be', 'wp.me',
+    'soo.gd', 's.id', 'adf.ly', 'lnkd.in', 'amzn.to', 'wp.me',
     't.me', 'b.link', 'tiny.cc', 'shorturl.at', 'cli.re'
 }
 
