@@ -23,6 +23,7 @@ from enrichment import storefronts
 from enrichment import archive
 from enrichment import academic
 from enrichment import social
+from enrichment import integrations
 
 
 # --- Music (Odesli/song.link) ---
@@ -184,11 +185,21 @@ async def run_all_enrichment(message: discord.Message, client: discord.Client, c
     await academic.handle_pypi(message, config)
     await academic.handle_stackoverflow(message, config)
     await academic.handle_github_gist(message, config)
+    await academic.handle_latex(message, config)
 
     # Social enrichment
     await social.handle_hackernews(message, config)
     await social.handle_devto(message, config)
     await social.handle_bluesky(message, config)
+
+    # Integration enrichment
+    await integrations.handle_pubmed(message, config)
+    await integrations.handle_gitlab(message, config)
+    await integrations.handle_orcid(message, config)
+    await integrations.handle_zenodo(message, config)
+    await integrations.handle_mdn(message, config)
+    await integrations.handle_codeberg(message, config)
+    await integrations.handle_bitbucket(message, config)
 
     # Core enrichment
     await github.handle_github_blob(message)
