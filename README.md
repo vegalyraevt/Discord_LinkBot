@@ -4,7 +4,7 @@
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/vegalyrae)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-A modular, $0-cost Discord bot that makes links safer, smarter, and more fun - with a Legend of Zelda theme.
+A modular, $0-cost Discord bot that makes links safer, smarter, and more fun... with a Legend of Zelda theme?
 
 > *In a society built around obfuscation and tracking, LinkBot helps make Discord servers just a bit more safe, private, and enjoyable without being intrusive.*
 
