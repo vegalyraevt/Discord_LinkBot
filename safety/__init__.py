@@ -1,5 +1,5 @@
 """
-safety.py - Safety/security checks for URLs and files.
+safety/__init__.py - Safety/security checks with SSRF protection.
 
 Includes:
   - Phishing detection via SinkingYachts API
@@ -25,15 +25,12 @@ from shared_constants import (
     SHORTENER_DOMAINS, SUSPICIOUS_TLDS,
     FILE_EXTENSIONS, DANGEROUS_EXTENSIONS
 )
-from safety import rdap
-from safety import virustotal
-from safety import scorecard
+from safety import rdap, virustotal, scorecard, ssrf
 
 import discord
 import stats
 
 
-# General URL regex
 GENERAL_URL_REGEX = re.compile(r'https?://(?:www\.)?([^/\s]+)(/[^\s]*[^\s\)\]>.,!?])?')
 
 
@@ -78,6 +75,9 @@ async def unshorten_links(message: discord.Message) -> None:
                 max_hops = 10
                 async with aiohttp.ClientSession() as session:
                     for _ in range(max_hops):
+                        # SSRF check on every redirect target
+                        if not await ssrf.is_safe_url(current_url):
+                            break
                         async with session.get(
                             current_url, allow_redirects=False,
                             timeout=aiohttp.ClientTimeout(total=3)
@@ -120,6 +120,9 @@ async def inspect_files(message: discord.Message, config: dict = None) -> None:
         clean_path = urlparse(path).path.lower()
         if clean_path.endswith(FILE_EXTENSIONS):
             file_url = f"https://{domain}{path}"
+            # SSRF check before HEAD request
+            if not await ssrf.is_safe_url(file_url):
+                continue
             ext = os.path.splitext(clean_path)[1]
             is_dangerous = ext in DANGEROUS_EXTENSIONS
             try:
@@ -162,19 +165,18 @@ async def warn_suspicious_tld(message: discord.Message, config: dict = None) -> 
     if not config.get("suspicious_tld_warn", True):
         return
     warned_domains = set()
-    async with aiohttp.ClientSession() as session:
-        for raw_url in re.findall(r'https?://[^\s\)\]>]+', message.content):
-            hostname = urlparse(raw_url).hostname
-            if not hostname:
-                continue
-            hostname_clean = hostname.lower().removeprefix("www.")
-            if hostname_clean in warned_domains:
-                continue
-            if check_suspicious_tld(hostname_clean):
-                warned_domains.add(hostname_clean)
-                embed = discord.Embed(title="Suspicious Domain Detected", description=f"The domain `{hostname_clean}` uses a TLD frequently associated with phishing/malware.\n\n`{raw_url}`\n\n*Exercise caution.*", color=discord.Color.orange())
-                await message.channel.send(embed=embed)
-                await stats.increment("safety_cards_shown")
+    for raw_url in re.findall(r'https?://[^\s\)\]>]+', message.content):
+        hostname = urlparse(raw_url).hostname
+        if not hostname:
+            continue
+        hostname_clean = hostname.lower().removeprefix("www.")
+        if hostname_clean in warned_domains:
+            continue
+        if check_suspicious_tld(hostname_clean):
+            warned_domains.add(hostname_clean)
+            embed = discord.Embed(title="Suspicious Domain Detected", description=f"The domain `{hostname_clean}` uses a TLD frequently associated with phishing/malware.\n\n`{raw_url}`\n\n*Exercise caution.*", color=discord.Color.orange())
+            await message.channel.send(embed=embed)
+            await stats.increment("safety_cards_shown")
 
 
 async def warn_http_downgrade(message: discord.Message, config: dict = None) -> None:
@@ -182,30 +184,28 @@ async def warn_http_downgrade(message: discord.Message, config: dict = None) -> 
         config = {}
     if not config.get("http_downgrade_warn", True):
         return
-    # All common TLDs expect HTTPS, except local/private addresses
     COMMON_TLDS = ('.com', '.org', '.net', '.io', '.dev', '.app',
                    '.gov', '.edu', '.co', '.uk', '.ca', '.de', '.fr', '.au',
                    '.info', '.biz', '.us', '.me', '.tv', '.cc')
     warned_domains = set()
-    async with aiohttp.ClientSession() as session:
-        for raw_url in re.findall(r'https?://[^\s\)\]>]+', message.content):
-            if not raw_url.startswith('http://'):
-                continue
-            hostname = urlparse(raw_url).hostname
-            if not hostname:
-                continue
-            hostname_clean = hostname.lower().removeprefix("www.")
-            if hostname_clean in warned_domains:
-                continue
-            https_expected = hostname_clean.endswith(COMMON_TLDS)
-            if hostname_clean in ('localhost', '127.0.0.1') or hostname_clean.startswith('192.168.'):
-                https_expected = False
-            if https_expected:
-                warned_domains.add(hostname_clean)
-                https_url = raw_url.replace('http://', 'https://', 1)
-                embed = discord.Embed(title="Insecure Connection Warning", description=f"`{raw_url}` is using an **unencrypted HTTP** connection.\n\nTry HTTPS instead: `{https_url}`", color=discord.Color.yellow())
-                await message.channel.send(embed=embed)
-                await stats.increment("safety_cards_shown")
+    for raw_url in re.findall(r'https?://[^\s\)\]>]+', message.content):
+        if not raw_url.startswith('http://'):
+            continue
+        hostname = urlparse(raw_url).hostname
+        if not hostname:
+            continue
+        hostname_clean = hostname.lower().removeprefix("www.")
+        if hostname_clean in warned_domains:
+            continue
+        https_expected = hostname_clean.endswith(COMMON_TLDS)
+        if hostname_clean in ('localhost', '127.0.0.1') or hostname_clean.startswith('192.168.'):
+            https_expected = False
+        if https_expected:
+            warned_domains.add(hostname_clean)
+            https_url = raw_url.replace('http://', 'https://', 1)
+            embed = discord.Embed(title="Insecure Connection Warning", description=f"`{raw_url}` is using an **unencrypted HTTP** connection.\n\nTry HTTPS instead: `{https_url}`", color=discord.Color.yellow())
+            await message.channel.send(embed=embed)
+            await stats.increment("safety_cards_shown")
 
 
 async def warn_new_domain(message: discord.Message, config: dict = None) -> bool:
@@ -245,7 +245,6 @@ async def warn_new_domain(message: discord.Message, config: dict = None) -> bool
                 embed = discord.Embed(title="New Domain Blocked", description=f"**{message.author.mention}, your link was removed.**\n\nThe domain `{hostname_clean}` was registered only **{age_days} day(s)** ago.\nRegistered: {result['registered_date'][:10]}\nRegistrar: {result.get('registrar', 'Unknown')}", color=discord.Color.red())
                 await message.channel.send(embed=embed, delete_after=15)
                 blocked = True
-                break  # Message already deleted, stop processing
             else:
                 embed = discord.Embed(title="New Domain Warning", description=f"The domain `{hostname_clean}` was registered only **{age_days} day(s)** ago.\n\n`{raw_url}`\n\n*New domains are frequently used for phishing.*\nRegistered: {result['registered_date'][:10]}", color=discord.Color.orange())
                 await message.channel.send(embed=embed)

@@ -22,6 +22,7 @@ COPY moderation.py .
 COPY embeds.py .
 COPY easter_eggs.py .
 COPY keyvault.py .
+COPY shared_constants.py .
 
 # Copy packages
 COPY safety/ ./safety/

@@ -2,14 +2,14 @@
 stats.py - Global bot-wide usage counter.
 
 Tracks how many times each feature has been used since bot startup.
-Persisted to stats.json periodically and on shutdown.
-All modules increment counters via stats.increment("key").
+Persisted to stats.json via atomic writes (prevents data loss on crash).
 
 Thread-safe using asyncio locks.
 """
 
 import json
 import os
+import tempfile
 import asyncio
 from typing import Dict
 
@@ -85,22 +85,19 @@ def _load_stats() -> None:
 
 
 def _save_stats() -> None:
-    """Write current stats to disk."""
+    """Write current stats to disk atomically."""
     try:
-        with open(STATS_PATH, 'w', encoding='utf-8') as f:
+        fd, temp_path = tempfile.mkstemp(
+            dir=os.path.dirname(STATS_PATH) or '.', suffix='.json')
+        with open(fd, 'w', encoding='utf-8') as f:
             json.dump(_stats, f, indent=2)
+        os.replace(temp_path, STATS_PATH)
     except IOError:
         pass
 
 
 async def increment(key: str, amount: int = 1) -> None:
-    """
-    Increment a stat counter. Thread-safe.
-    
-    Args:
-        key: The stat key to increment.
-        amount: How much to increment by (default 1).
-    """
+    """Increment a stat counter. Thread-safe."""
     async with _lock:
         if key in _stats:
             _stats[key] += amount

@@ -17,14 +17,21 @@ KEY_FILE = "keyvault.key"
 
 
 def _get_or_create_key() -> bytes:
-    """Get the Fernet key from disk, or generate and save a new one."""
-    if os.path.exists(KEY_FILE):
+    """Get the Fernet key from disk, or generate and save a new one.
+    Uses exclusive create (xb) to prevent race conditions."""
+    try:
         with open(KEY_FILE, "rb") as f:
             return f.read()
-    key = Fernet.generate_key()
-    with open(KEY_FILE, "wb") as f:
-        f.write(key)
-    return key
+    except FileNotFoundError:
+        pass
+    try:
+        key = Fernet.generate_key()
+        with open(KEY_FILE, "xb") as f:
+            f.write(key)
+        return key
+    except FileExistsError:
+        with open(KEY_FILE, "rb") as f:
+            return f.read()
 
 
 def encrypt_value(plaintext: str) -> str:

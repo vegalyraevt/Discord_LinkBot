@@ -4,10 +4,15 @@ config_manager.py - JSON file-based per-server configuration.
 Each server's config is stored in config/{server_id}.json.
 When no file exists, defaults are used.
 Configs are cached in memory for 60 seconds to avoid disk thrashing.
+
+Uses deepcopy to prevent nested dict mutation and atomic writes
+to prevent data loss on crash.
 """
 
+import copy
 import json
 import os
+import tempfile
 import time
 from typing import Dict, Any, Optional
 
@@ -94,7 +99,7 @@ def load_defaults() -> Dict[str, Any]:
         try:
             with open(DEFAULTS_PATH, 'r', encoding='utf-8') as f:
                 loaded = json.load(f)
-                # Deep merge with DEFAULT_CONFIG to ensure all keys exist
+                # Deep merge with DEFAULT_CONFIG to ensure all keys exist            
             return _deep_merge(DEFAULT_CONFIG.copy(), loaded)
         except (json.JSONDecodeError, IOError):
             pass
@@ -106,6 +111,7 @@ def load_config(server_id: int) -> Dict[str, Any]:
     Load the config for a given server.
     Falls back to defaults if no per-server file exists.
     Results are cached for CACHE_TTL_SECONDS.
+    Uses deepcopy to prevent nested dict mutation in callers.
     """
     sid = str(server_id)
     now = time.time()
@@ -113,11 +119,12 @@ def load_config(server_id: int) -> Dict[str, Any]:
     if sid in _config_cache:
         cached_config, cached_time = _config_cache[sid]
         if now - cached_time < CACHE_TTL_SECONDS:
-            return cached_config.copy()
-    # Load from file or use defaults
+            return copy.deepcopy(cached_config)
+
     _ensure_config_dir()
     config = load_defaults()
     server_path = os.path.join(CONFIG_DIR, f"{sid}.json")
+
     if os.path.exists(server_path):
         try:
             with open(server_path, 'r', encoding='utf-8') as f:
@@ -125,22 +132,26 @@ def load_config(server_id: int) -> Dict[str, Any]:
             config = _deep_merge(config, server_overrides)
         except (json.JSONDecodeError, IOError):
             pass
+
     _config_cache[sid] = (config, now)
-    return config.copy()
+    return copy.deepcopy(config)
 
 
 def save_config(server_id: int, config: Dict[str, Any]) -> bool:
     """
-    Save the config for a given server to disk.
+    Save the config for a given server to disk atomically.
     Returns True on success, False on failure.
     """
     sid = str(server_id)
     _ensure_config_dir()
     server_path = os.path.join(CONFIG_DIR, f"{sid}.json")
     try:
-        with open(server_path, 'w', encoding='utf-8') as f:
+        fd, temp_path = tempfile.mkstemp(
+            dir=os.path.dirname(server_path) or '.', suffix='.json')
+        with open(fd, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-        _config_cache[sid] = (config.copy(), time.time())
+        os.replace(temp_path, server_path)
+        _config_cache[sid] = (copy.deepcopy(config), time.time())
         return True
     except IOError:
         return False

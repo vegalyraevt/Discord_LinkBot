@@ -1,9 +1,5 @@
 """
-LinkBot v2 - Discord Link Management Bot
-
-Uses commands.Bot for hybrid operation:
-  - on_message handler (15-stage link processing pipeline)
-  - app_commands.CommandTree (slash commands via commands.py)
+main.py - LinkBot v2 routing.
 """
 
 import os
@@ -25,6 +21,12 @@ import moderation
 import commands as bot_commands
 
 load_dotenv()
+
+# Debug logging: only log full message content when explicitly enabled
+DEBUG_LOG = os.getenv("LINKBOT_DEBUG", "").lower() == "true"
+
+if DEBUG_LOG:
+    print("DEBUG LOGGING ENABLED - message content will be printed")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -60,7 +62,7 @@ async def on_guild_join(guild: discord.Guild):
                 break
     if welcome_channel:
         embed = discord.Embed(
-            title="HYYAAAAAA! LinkBot has arrived! ⚔️",
+            title="HYYAAAAAA! LinkBot has arrived!",
             description=(
                 "Thanks for adding me to your server!\n"
                 "• `/setup` - Interactive setup wizard\n"
@@ -78,7 +80,8 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
     await bot.process_commands(message)
-    print(f"Message from {message.author}: {message.content}")
+    if DEBUG_LOG:
+        print(f"Message from {message.author}: {message.content}")
 
     config = None
     if message.guild:
@@ -119,27 +122,21 @@ async def on_message(message: discord.Message):
                 await safety.inspect_files(message, config)
             await safety.warn_suspicious_tld(message, config)
             await safety.warn_http_downgrade(message, config)
-
-            # FIX #1: Halt pipeline if domain_age_block deleted the message
             blocked_by_age = await safety.warn_new_domain(message, config)
             if blocked_by_age:
                 await moderation.log_action(message, config,
                     "New Domain Blocked", "Domain age < 30 days", discord.Color.red())
                 return
-
             await safety.virustotal.warn_virustotal(message, config)
             await safety.scorecard.maybe_show_scorecard(message, config)
 
     # ===== ENRICHMENT =====
     await enrichment.run_all_enrichment(message, bot, config)
-
     # ===== TRACKING STRIPPING =====
     await embeds.strip_tracking(message)
-
     # ===== NSFW DETECTION =====
     if message.guild and config:
         await embeds.warn_nsfw(message, config)
-
     # ===== EASTER EGGS =====
     if message.guild and config:
         if config.get("easter_eggs", True):
@@ -147,7 +144,6 @@ async def on_message(message: discord.Message):
             if handled:
                 return
         await easter_eggs.handle_reactions(message, config)
-
     # ===== EMBED FIXING (deletes original, runs LAST) =====
     await embeds.handle_link_fixer(message)
 
