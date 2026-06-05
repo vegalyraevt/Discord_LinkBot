@@ -22,7 +22,7 @@ A modular, $0-cost Discord bot that makes links safer, smarter, and more fun - w
 | HTTP downgrade warnings | IMDb movie details | Duplicate link detection | Cucco swarm reactions |
 | Domain age check (RDAP) | Wikipedia summaries | Trusted role bypass | Triforce reactions |
 | Executable file danger alerts | GitHub repo/code previews | Notification & audit channels | Rare item drops |
-| Redirect chain inspection | Music link aggregation (Odesli) | Command cooldowns | 5% Rickroll chance |
+| Redirect chain inspection | Music link aggregation (Odesli) | Command cooldowns | 5% Song chance |
 | Safety score card (0-10) | Wayback Machine archiving | NSFW content warnings | |
 | URL unshortening | Academic papers (DOI, arXiv) | Manager role delegation | |
 | | npm / PyPI package info | Disabled/opt-in channels | |
