@@ -4,7 +4,7 @@
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/vegalyrae)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-A modular, $0-cost Discord bot that makes links safer, smarter, and more fun - with a Legend of Zelda theme.
+A modular, $0-cost Discord bot that makes links safer, smarter, and more fun... with a Legend of Zelda theme?
 
 > *In a society built around obfuscation and tracking, LinkBot helps make Discord servers just a bit more safe, private, and enjoyable without being intrusive.*
 
@@ -22,7 +22,7 @@ A modular, $0-cost Discord bot that makes links safer, smarter, and more fun - w
 | HTTP downgrade warnings | IMDb movie details | Duplicate link detection | Cucco swarm reactions |
 | Domain age check (RDAP) | Wikipedia summaries | Trusted role bypass | Triforce reactions |
 | Executable file danger alerts | GitHub repo/code previews | Notification & audit channels | Rare item drops |
-| Redirect chain inspection | Music link aggregation (Odesli) | Command cooldowns | 5% Rickroll chance |
+| Redirect chain inspection | Music link aggregation (Odesli) | Command cooldowns | 5% Song chance |
 | Safety score card (0-10) | Wayback Machine archiving | NSFW content warnings | |
 | URL unshortening | Academic papers (DOI, arXiv) | Manager role delegation | |
 | | npm / PyPI package info | Disabled/opt-in channels | |
