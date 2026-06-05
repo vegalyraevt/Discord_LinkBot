@@ -1,5 +1,5 @@
 """
-commands.py â€” Slash command definitions for LinkBot v2.
+commands.py - Slash command definitions for LinkBot v2.
 
 Uses discord.py's app_commands (tree) for slash commands.
 Commands are registered to the bot's command tree in main.py.
@@ -16,9 +16,7 @@ from discord import app_commands
 from typing import Optional
 
 import keyvault
-
 import config_manager
-
 import permissions
 import channel_filter
 import stats as stats_module
@@ -61,7 +59,7 @@ async def _check_cooldown(interaction: discord.Interaction, config: dict) -> boo
     if not moderation.check_command_cooldown(interaction.user.id, config):
         cooldown = config.get("command_cooldown_seconds", 3)
         await interaction.response.send_message(
-            f"â±ï¸ Please wait {cooldown}s between commands.", ephemeral=True
+            f"Please wait {cooldown}s between commands.", ephemeral=True
         )
         return False
     return True
@@ -85,7 +83,7 @@ async def cmd_scan(interaction: discord.Interaction, url: str):
     score, reasons = safety_scorecard.calculate_score(url)
     vt_result = None
     try:
-        vt_result = await vt_module.scan_url(url)
+        vt_result = await vt_module.scan_url(url, config, interaction.guild.id if interaction.guild else None)
         if vt_result:
             await stats_module.increment("vt_scans")
             score, reasons = safety_scorecard.calculate_score(url, vt_result=vt_result)
@@ -137,15 +135,15 @@ async def cmd_unshorten(interaction: discord.Interaction, url: str):
                         current_url = location
                     else:
                         break
-        hops_text = '\n'.join(f"â†’ {u}" for u in redirect_chain)
+        hops_text = '\n'.join(f"- {u}" for u in redirect_chain)
         embed = discord.Embed(
-            title="ðŸ” URL Unshortened",
+            title="URL Unshortened",
             description=f"**Redirect chain ({len(redirect_chain)} hops):**\n\n{url}\n{hops_text}",
             color=discord.Color.blue(),
         )
         await interaction.followup.send(embed=embed)
     except Exception as e:
-        await interaction.followup.send(f"âš ï¸ Failed to unshorten: {e}")
+        await interaction.followup.send(f"Failed to unshorten: {e}")
     await stats_module.increment("commands_used")
 
 
@@ -159,15 +157,15 @@ async def cmd_archive(interaction: discord.Interaction, url: str):
     archived_url = await archive_module.submit_to_archive(url)
     if archived_url:
         embed = discord.Embed(
-            title="ðŸ“¸ Submitted to Wayback Machine",
-            description=f"ðŸ”- **Original:** {url}\nðŸ“š **Archive:** {archived_url}\n\n*It may take a few minutes for the snapshot to become available.*",
+            title="Submitted to Wayback Machine",
+            description=f"**Original:** {url}\n**Archive:** {archived_url}\n\n*It may take a few minutes for the snapshot to become available.*",
             color=discord.Color.dark_green(),
         )
         embed.set_footer(text="Powered by archive.org")
         await interaction.followup.send(embed=embed)
         await stats_module.increment("archive_snapshots")
     else:
-        await interaction.followup.send("âš ï¸ Failed to archive this URL.")
+        await interaction.followup.send("Failed to archive this URL.")
     await stats_module.increment("commands_used")
 
 
@@ -183,16 +181,16 @@ async def cmd_whois(interaction: discord.Interaction, domain: str):
     await interaction.response.defer(ephemeral=False)
     result = await rdap_module.query_domain(domain)
     if not result:
-        await interaction.followup.send(f"âš ï¸ Could not look up `{domain}`.")
+        await interaction.followup.send(f"Could not look up `{domain}`.")
         return
     age_days = rdap_module.get_domain_age_days(result.get("registered_date"))
-    embed = discord.Embed(title=f"ðŸ” WHOIS: {result['domain']}", color=discord.Color.blue())
-    embed.add_field(name="ðŸ“… Registered", value=result.get("registered_date", "Unknown")[:10], inline=True)
-    embed.add_field(name="â±ï¸ Age", value=f"{age_days} days" if age_days else "Unknown", inline=True)
-    embed.add_field(name="ðŸ¢ Registrar", value=result.get("registrar", "Unknown"), inline=True)
+    embed = discord.Embed(title=f"WHOIS: {result['domain']}", color=discord.Color.blue())
+    embed.add_field(name="Registered", value=result.get("registered_date", "Unknown")[:10], inline=True)
+    embed.add_field(name="Age", value=f"{age_days} days" if age_days else "Unknown", inline=True)
+    embed.add_field(name="Registrar", value=result.get("registrar", "Unknown"), inline=True)
     if result.get("nameservers"):
-        embed.add_field(name="ðŸŒ Nameservers", value="\n".join(result["nameservers"][:3]), inline=False)
-    embed.set_footer(text="RDAP Lookup â€¢ LinkBot")
+        embed.add_field(name="Nameservers", value="\n".join(result["nameservers"][:3]), inline=False)
+    embed.set_footer(text="RDAP Lookup - LinkBot")
     await interaction.followup.send(embed=embed)
     await stats_module.increment("whois_lookups")
     await stats_module.increment("commands_used")
@@ -205,28 +203,28 @@ async def cmd_stats(interaction: discord.Interaction):
         return
     await interaction.response.defer(ephemeral=False)
     all_stats = stats_module.get_stats()
-    embed = discord.Embed(title="ðŸ“Š LinkBot Statistics", description="Global usage since last restart:", color=discord.Color.dark_theme())
+    embed = discord.Embed(title="LinkBot Statistics", description="Global usage since last restart:", color=discord.Color.dark_theme())
     safety_pairs = [
-        ("ðŸ”- Fixed", "links_fixed"), ("ðŸ§¹ Tracking Stripped", "tracking_stripped"),
-        ("ðŸ” Unshortened", "links_unshortened"), ("âš ï¸ Malicious Blocked", "malicious_blocked"),
-        ("ðŸ“Ž Files Inspected", "files_inspected"), ("ðŸ¦º VT Scans", "vt_scans"),
-        ("ðŸ†• New Domains Blocked", "new_domains_blocked"), ("ðŸ›¡ï¸ Score Cards", "safety_cards_shown"),
-        ("ðŸ”¨ Blacklist Deletions", "blacklist_deletions"), ("â›” Whitelist Blocks", "whitelist_blocks"),
-        ("â±ï¸ Timeouts", "timeouts_issued"), ("ðŸ-‘ï¸ Deleted", "messages_deleted"),
+        ("Links Fixed", "links_fixed"), ("Tracking Stripped", "tracking_stripped"),
+        ("URLs Unshortened", "links_unshortened"), ("Malicious Blocked", "malicious_blocked"),
+        ("Files Inspected", "files_inspected"), ("VT Scans", "vt_scans"),
+        ("New Domains Blocked", "new_domains_blocked"), ("Score Cards Shown", "safety_cards_shown"),
+        ("Blacklist Deletions", "blacklist_deletions"), ("Whitelist Blocks", "whitelist_blocks"),
+        ("Timeouts Issued", "timeouts_issued"), ("Messages Deleted", "messages_deleted"),
     ]
     enrich_pairs = [
-        ("ðŸŽ® Steam", "steam_games"), ("ðŸŽ¬ IMDb", "imdb_movies"), ("ðŸŽ§ Music", "music_links"),
-        ("ðŸ“š Wikipedia", "wikipedia_summaries"), ("ðŸ›’ Amazon", "amazon_products"),
-        ("ðŸ“¸ Archived", "archive_snapshots"), ("ðŸ’» GH Snippets", "github_snippets"),
-        ("ðŸ“ GH Repos", "github_repos"), ("ðŸ‘¤ GH Profiles", "github_profiles"),
-        ("ðŸ’¬ Discord Quotes", "discord_quotes"), ("â–¶ï¸ YouTube", "youtube_enrichments"),
-        ("ðŸ“º Twitch", "twitch_enrichments"),
+        ("Steam Games", "steam_games"), ("IMDb Movies", "imdb_movies"), ("Music Links", "music_links"),
+        ("Wikipedia", "wikipedia_summaries"), ("Amazon Products", "amazon_products"),
+        ("Archived", "archive_snapshots"), ("GH Snippets", "github_snippets"),
+        ("GH Repos", "github_repos"), ("GH Profiles", "github_profiles"),
+        ("Discord Quotes", "discord_quotes"), ("YouTube", "youtube_enrichments"),
+        ("Twitch", "twitch_enrichments"),
     ]
-    fun_pairs = [("ðŸŽ® Easter Eggs", "easter_eggs"), ("ðŸŽ² Rickrolls", "rickrolls_dealt"), ("ðŸ-ï¸ Rare Drops", "rare_drops")]
-    embed.add_field(name="ðŸ›¡ï¸ Safety", value="\n".join(f"`{all_stats.get(k, 0):>6,}` {l}" for l, k in safety_pairs) or "No data", inline=True)
-    embed.add_field(name="ðŸ“‹ Enrichment", value="\n".join(f"`{all_stats.get(k, 0):>6,}` {l}" for l, k in enrich_pairs) or "No data", inline=True)
-    embed.add_field(name="ðŸŽ® Fun", value="\n".join(f"`{all_stats.get(k, 0):>6,}` {l}" for l, k in fun_pairs) or "No data", inline=True)
-    embed.set_footer(text=f"Commands used: {all_stats.get('commands_used', 0)} â€¢ LinkBot v2")
+    fun_pairs = [("Easter Eggs", "easter_eggs"), ("Rickrolls", "rickrolls_dealt"), ("Rare Drops", "rare_drops")]
+    embed.add_field(name="Safety", value="\n".join(f"`{all_stats.get(k, 0):>6,}` {l}" for l, k in safety_pairs) or "No data", inline=True)
+    embed.add_field(name="Enrichment", value="\n".join(f"`{all_stats.get(k, 0):>6,}` {l}" for l, k in enrich_pairs) or "No data", inline=True)
+    embed.add_field(name="Fun", value="\n".join(f"`{all_stats.get(k, 0):>6,}` {l}" for l, k in fun_pairs) or "No data", inline=True)
+    embed.set_footer(text=f"Commands used: {all_stats.get('commands_used', 0)} - LinkBot v2")
     await interaction.followup.send(embed=embed)
     await stats_module.increment("commands_used")
 
@@ -237,28 +235,28 @@ async def cmd_help(interaction: discord.Interaction):
     if not await _check_channel(interaction, config):
         return
     await interaction.response.defer(ephemeral=True)
-    embed = discord.Embed(title="ðŸ“– LinkBot Help", description="*It's dangerous to go alone â€” take this!* âš”ï¸", color=discord.Color.green())
-    embed.add_field(name="ðŸ” User Commands", value=(
-        "`/scan <url>` â€” Full safety scan with VirusTotal\n"
-        "`/safety <url>` â€” Quick safety check\n"
-        "`/unshorten <url>` â€” Expand shortened URLs\n"
-        "`/archive <url>` â€” Save to Wayback Machine\n"
-        "`/whois <domain>` â€” Domain registration lookup\n"
-        "`/stats` â€” Global bot statistics\n"
-        "`/config show` â€” View server settings\n"
+    embed = discord.Embed(title="LinkBot Help", description="*It's dangerous to go alone - take this!*", color=discord.Color.green())
+    embed.add_field(name="User Commands", value=(
+        "`/scan <url>` - Full safety scan with VirusTotal\n"
+        "`/safety <url>` - Quick safety check\n"
+        "`/unshorten <url>` - Expand shortened URLs\n"
+        "`/archive <url>` - Save to Wayback Machine\n"
+        "`/whois <domain>` - Domain registration lookup\n"
+        "`/stats` - Global bot statistics\n"
+        "`/config show` - View server settings\n"
     ), inline=False)
-    embed.add_field(name="âš™ï¸ Management Commands", value=(
-        "`/setup` â€” Interactive setup wizard\n"
-        "`/config toggle <feature>` â€” Enable/disable features\n"
-        "`/config threshold <1-10>` â€” Set safety alert level\n"
-        "`/config notify set #channel` â€” Set alert channel\n"
-        "`/config log set #channel` â€” Set audit log channel\n"
-        "`/config manager add @role` â€” Delegate management\n"
-        "`/blacklist add/remove/list <domain>` â€” Manage blocked domains\n"
-        "`/whitelist add/remove/list <domain>` â€” Manage allowed domains\n"
-        "`/trusted add/remove/list @role` â€” Safety bypass roles\n"
+    embed.add_field(name="Management Commands", value=(
+        "`/setup` - Interactive setup wizard\n"
+        "`/config toggle <feature>` - Enable/disable features\n"
+        "`/config threshold <1-10>` - Set safety alert level\n"
+        "`/config notify set #channel` - Set alert channel\n"
+        "`/config log set #channel` - Set audit log channel\n"
+        "`/config manager add @role` - Delegate management\n"
+        "`/blacklist add/remove/list <domain>` - Manage blocked domains\n"
+        "`/whitelist add/remove/list <domain>` - Manage allowed domains\n"
+        "`/trusted add/remove/list @role` - Safety bypass roles\n"
     ), inline=False)
-    embed.set_footer(text="LinkBot v2 â€¢ Use /setup to configure your server")
+    embed.set_footer(text="LinkBot v2 - Use /setup to configure your server")
     await interaction.followup.send(embed=embed, ephemeral=True)
     await stats_module.increment("commands_used")
 
@@ -290,7 +288,7 @@ async def cmd_config(
 
     if action.value == "show":
         await interaction.response.defer(ephemeral=False)
-        embed = discord.Embed(title="âš™ï¸ Server Configuration", color=discord.Color.blue())
+        embed = discord.Embed(title="Server Configuration", color=discord.Color.blue())
         settings = [
             ("Easter Eggs", config.get("easter_eggs", True)), ("Reactions", config.get("reactions", True)),
             ("Safety Threshold", f"{config.get('safety_score_threshold', 6)}/10"),
@@ -323,7 +321,7 @@ async def cmd_config(
             return
         config[option.lower()] = not config.get(option.lower(), True)
         config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… `{option}` is now **{'ON' if config[option.lower()] else 'OFF'}**.", ephemeral=False)
+        await interaction.response.send_message(f"`{option}` is now **{'ON' if config[option.lower()] else 'OFF'}**.", ephemeral=False)
 
     elif action.value == "threshold":
         if not option or not option.isdigit() or not 1 <= int(option) <= 10:
@@ -331,7 +329,7 @@ async def cmd_config(
             return
         config["safety_score_threshold"] = int(option)
         config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… Safety score threshold set to **{option}/10**.", ephemeral=False)
+        await interaction.response.send_message(f"Safety score threshold set to **{option}/10**.", ephemeral=False)
 
     elif action.value == "notify":
         if not option:
@@ -343,7 +341,7 @@ async def cmd_config(
             return
         config["notification_channel"] = int(channel_id)
         config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… Notification channel set.", ephemeral=False)
+        await interaction.response.send_message("Notification channel set.", ephemeral=False)
 
     elif action.value == "log":
         if not option:
@@ -355,7 +353,7 @@ async def cmd_config(
             return
         config["logging_channel"] = int(channel_id)
         config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… Audit log channel set.", ephemeral=False)
+        await interaction.response.send_message("Audit log channel set.", ephemeral=False)
 
     elif action.value == "manager_add":
         if not option:
@@ -371,7 +369,7 @@ async def cmd_config(
             roles.append(rid)
             config["manager_roles"] = roles
             config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… <@&{rid}> added as a manager role.", ephemeral=False)
+        await interaction.response.send_message(f"<@&{rid}> added as a manager role.", ephemeral=False)
 
     elif action.value == "manager_remove":
         if not option:
@@ -387,7 +385,7 @@ async def cmd_config(
             roles.remove(rid)
             config["manager_roles"] = roles
             config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… <@&{rid}> removed from manager roles.", ephemeral=False)
+        await interaction.response.send_message(f"<@&{rid}> removed from manager roles.", ephemeral=False)
 
     await stats_module.increment("commands_used")
 
@@ -417,7 +415,7 @@ async def cmd_blacklist(interaction: discord.Interaction, action: app_commands.C
         bl["domains"] = domains
         config["blacklist"] = bl
         config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… `{domain}` added to blacklist.", ephemeral=False)
+        await interaction.response.send_message(f"`{domain}` added to blacklist.", ephemeral=False)
     elif action.value == "remove":
         if not domain:
             await interaction.response.send_message("Please provide a domain name.", ephemeral=True)
@@ -427,12 +425,12 @@ async def cmd_blacklist(interaction: discord.Interaction, action: app_commands.C
         bl["domains"] = domains
         config["blacklist"] = bl
         config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… `{domain}` removed from blacklist.", ephemeral=False)
+        await interaction.response.send_message(f"`{domain}` removed from blacklist.", ephemeral=False)
     elif action.value == "list":
         await interaction.response.defer(ephemeral=True)
         domains = bl.get("domains", {})
         await interaction.followup.send(
-            f"**Blacklisted domains:**\n" + "\n".join(f"â€¢ `{d}`" for d in domains) if domains else "No domains blacklisted.",
+            f"**Blacklisted domains:**\n" + "\n".join(f"- `{d}`" for d in domains) if domains else "No domains blacklisted.",
             ephemeral=True,
         )
     elif action.value == "action":
@@ -442,7 +440,7 @@ async def cmd_blacklist(interaction: discord.Interaction, action: app_commands.C
         bl["default_action"] = domain.lower()
         config["blacklist"] = bl
         config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… Default action set to `{domain}`.", ephemeral=False)
+        await interaction.response.send_message(f"Default action set to `{domain}`.", ephemeral=False)
     elif action.value == "message":
         if not message:
             await interaction.response.send_message("Please provide a message string.", ephemeral=True)
@@ -450,7 +448,7 @@ async def cmd_blacklist(interaction: discord.Interaction, action: app_commands.C
         bl["custom_message"] = message
         config["blacklist"] = bl
         config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message("âœ… Custom violation message updated.", ephemeral=False)
+        await interaction.response.send_message("Custom violation message updated.", ephemeral=False)
     await stats_module.increment("commands_used")
 
 
@@ -472,7 +470,7 @@ async def cmd_whitelist(interaction: discord.Interaction, action: app_commands.C
     if action.value in ("mode_blacklist", "mode_whitelist"):
         config["blacklist_mode"] = "blacklist" if action.value == "mode_blacklist" else "whitelist"
         config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… Switched to **{config['blacklist_mode']}** mode.", ephemeral=False)
+        await interaction.response.send_message(f"Switched to **{config['blacklist_mode']}** mode.", ephemeral=False)
         return
     wl = config.get("whitelist", {})
     if action.value == "add":
@@ -484,7 +482,7 @@ async def cmd_whitelist(interaction: discord.Interaction, action: app_commands.C
         wl["domains"] = domains
         config["whitelist"] = wl
         config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… `{domain}` added to whitelist.", ephemeral=False)
+        await interaction.response.send_message(f"`{domain}` added to whitelist.", ephemeral=False)
     elif action.value == "remove":
         if not domain:
             await interaction.response.send_message("Please provide a domain name.", ephemeral=True)
@@ -494,12 +492,12 @@ async def cmd_whitelist(interaction: discord.Interaction, action: app_commands.C
         wl["domains"] = domains
         config["whitelist"] = wl
         config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… `{domain}` removed from whitelist.", ephemeral=False)
+        await interaction.response.send_message(f"`{domain}` removed from whitelist.", ephemeral=False)
     elif action.value == "list":
         await interaction.response.defer(ephemeral=True)
         domains = wl.get("domains", {})
         await interaction.followup.send(
-            f"**Whitelisted domains:**\n" + "\n".join(f"â€¢ `{d}`" for d in domains) if domains else "No domains whitelisted.",
+            f"**Whitelisted domains:**\n" + "\n".join(f"- `{d}`" for d in domains) if domains else "No domains whitelisted.",
             ephemeral=True,
         )
     await stats_module.increment("commands_used")
@@ -513,7 +511,7 @@ async def cmd_setup(interaction: discord.Interaction):
     if not await _check_channel(interaction, config):
         return
     await interaction.response.defer(ephemeral=True)
-    embed = discord.Embed(title="ðŸ› ï¸ LinkBot Setup Wizard", description=(
+    embed = discord.Embed(title="LinkBot Setup Wizard", description=(
         "Welcome to the LinkBot setup!\n\n"
         "**1. Set a notification channel:** `/config notify set #your-channel`\n\n"
         "**2. Set an audit log channel:** `/config log set #your-log-channel`\n\n"
@@ -523,7 +521,7 @@ async def cmd_setup(interaction: discord.Interaction):
         "**6. Delegate management:** `/config manager add @ModRole`\n\n"
         "**7. View config:** `/config show`\n\nUse `/help` to see all commands."
     ), color=discord.Color.green())
-    embed.set_footer(text="LinkBot v2 â€¢ It's dangerous to go alone!")
+    embed.set_footer(text="LinkBot v2 - It's dangerous to go alone!")
     await interaction.followup.send(embed=embed, ephemeral=True)
     await stats_module.increment("commands_used")
 
@@ -553,7 +551,7 @@ async def cmd_trusted(interaction: discord.Interaction, action: app_commands.Cho
         config["trusted_roles"] = trusted
         config_manager.save_config(interaction.guild.id, config)
         await interaction.response.send_message(
-            f"âœ… {role.mention} added as trusted.\nâš ï¸ **Warning:** Members with this role bypass ALL link safety checks including phishing detection.",
+            f"{role.mention} added as trusted.\n**Warning:** Members with this role bypass ALL link safety checks including phishing detection.",
             ephemeral=False,
         )
     elif action.value == "remove":
@@ -566,18 +564,15 @@ async def cmd_trusted(interaction: discord.Interaction, action: app_commands.Cho
         trusted.remove(role.id)
         config["trusted_roles"] = trusted
         config_manager.save_config(interaction.guild.id, config)
-        await interaction.response.send_message(f"âœ… {role.mention} removed from trusted roles.", ephemeral=False)
+        await interaction.response.send_message(f"{role.mention} removed from trusted roles.", ephemeral=False)
     elif action.value == "list":
         await interaction.response.defer(ephemeral=True)
         if not trusted:
             await interaction.followup.send("No trusted roles configured.", ephemeral=True)
         else:
-            await interaction.followup.send("**Trusted roles:**\n" + "\n".join(f"â€¢ <@&{rid}>" for rid in trusted), ephemeral=True)
+            await interaction.followup.send("**Trusted roles:**\n" + "\n".join(f"- <@&{rid}>" for rid in trusted), ephemeral=True)
     await stats_module.increment("commands_used")
 
-
-#!/env/python
-# ADD THIS BEFORE "Command Registration" section in commands.py
 
 @app_commands.command(name="vtkey", description="Manage VirusTotal API key for this server")
 @app_commands.describe(action="Action", key="VirusTotal API key", limit="Hourly scan limit (1-500, 0 to disable)")
@@ -617,7 +612,7 @@ async def cmd_vtkey(
                 "It is never visible after being set, not even to the bot host.\n"
                 "You can remove it at any time with `/vtkey remove`.\n\n"
                 "Free tier: 500 lookups/day. LinkBot limits to 20/hour by default.\n"
-                "VirusTotal Premium users can adjust this with `/vtkey limit <number>`."
+                "Premium users can adjust this with `/vtkey limit <number>`."
             ),
             color=discord.Color.blue(),
         ), ephemeral=True)
@@ -697,8 +692,6 @@ async def cmd_vtkey(
     await stats_module.increment("commands_used")
 
 
-
-
 # ===== Command Registration =====
 
 def register_commands(tree: app_commands.CommandTree):
@@ -714,5 +707,4 @@ def register_commands(tree: app_commands.CommandTree):
     tree.add_command(cmd_whitelist)
     tree.add_command(cmd_setup)
     tree.add_command(cmd_trusted)
-
     tree.add_command(cmd_vtkey)
