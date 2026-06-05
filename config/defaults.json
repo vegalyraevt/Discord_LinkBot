@@ -1,0 +1,71 @@
+{
+  "manager_roles": [],
+  "trusted_roles": [],
+  "vt_settings": {
+    "api_key_encrypted": "",
+    "hourly_limit": 20,
+    "daily_limit": 500
+  },
+  "channel_mode": "all",
+  "disabled_channels": [],
+  "enabled_channels": [],
+  "command_channels": [],
+  "updates_channel": null,
+  "easter_eggs": true,
+  "reactions": true,
+  "embed_fix": {
+    "twitter": true,
+    "tiktok": true,
+    "instagram": true,
+    "reddit": true,
+    "pixiv": true,
+    "bluesky": true,
+    "threads": true
+  },
+  "enrichment": {
+    "youtube": true,
+    "twitch": true,
+    "github_gist": true,
+    "hacker_news": true,
+    "stack_overflow": true,
+    "dev_to": true,
+    "npm": true,
+    "pypi": true,
+    "doi": true,
+    "arxiv": true
+  },
+  "nsfw_warning": false,
+  "nsfw_exempt_channels": [],
+  "safety_score_threshold": 6,
+  "notification_channel": null,
+  "logging_channel": null,
+  "archive": {
+    "enabled": false,
+    "channels": [],
+    "link_types": ["all"]
+  },
+  "whois_access": "mods",
+  "blacklist_mode": "blacklist",
+  "blacklist": {
+    "domains": {},
+    "default_action": "delete",
+    "custom_message": "Your link was removed because that domain is not allowed here.",
+    "timeout_duration": 5
+  },
+  "whitelist": {
+    "domains": {}
+  },
+  "ratelimit": {
+    "enabled": true,
+    "messages_per_window": 5,
+    "window_seconds": 10
+  },
+  "command_cooldown_seconds": 3,
+  "duplicate_link_window": 5,
+  "file_warnings": true,
+  "file_auto_delete": false,
+  "suspicious_tld_warn": true,
+  "http_downgrade_warn": true,
+  "domain_age_warn": true,
+  "domain_age_block": false
+}

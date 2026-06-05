@@ -54,6 +54,22 @@ env/
 *.swo
 *~
 
+# Bot data (generated at runtime)
+stats.json
+config/*.json
+!config/defaults.json
+keyvault.key
+
+# Backups and temp files
+backups/
+backup_*.zip
+_test_*
+_fix_*
+_temp_*
+
+# Plans and testing docs
+plans/
+
 # OS
 .DS_Store
 Thumbs.db

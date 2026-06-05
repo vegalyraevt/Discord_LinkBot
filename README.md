@@ -1,119 +1,228 @@
-# LinkBot - Discord Embed Fixer
+# LinkBot - Discord Link Safety & Embed Fixer
 
-A lightweight, webhook-powered Discord bot built in Python (`discord.py`) that automatically fixes broken social media embeds by replacing domain names with embed-friendly alternatives.
+[![Invite LinkBot](https://img.shields.io/badge/Invite-LinkBot-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/oauth2/authorize?client_id=1475244291944218715&permissions=2322581411986432&integration_type=0&scope=bot)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/vegalyrae)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-## Invite me!
-[Discord Invite Link](https://discord.com/oauth2/authorize?client_id=1475244291944218715&permissions=2322581411986432&integration_type=0&scope=bot)
+A modular, $0-cost Discord bot that makes links safer, smarter, and more fun - with a Legend of Zelda theme.
+
+> *In a society built around obfuscation and tracking, LinkBot helps make Discord servers just a bit more safe, private, and enjoyable without being intrusive.*
 
 <img width="779" height="326" alt="derp-link-meme-7" src="https://github.com/user-attachments/assets/c964ce38-30a7-420b-bb84-a0cea7f67c89" />
 
-## How It Works
+---
 
-1. The bot listens to all messages in channels where it is invited.
-2. It detects URLs from supported platforms using regex.
-3. It replaces the domain with an embed-friendly alternative.
-4. It deletes the original message.
-5. It reposts the modified URL using a webhook, perfectly impersonating the original author.
+## What It Does
 
-## Supported Platforms
+| 🛡️ Safety | 📋 Link Enrichment | ⚙️ Server Management | 🎮 Fun |
+|------------|-------------------|-----------------------|--------|
+| Phishing detection (SinkingYachts) | YouTube/Twitch info embeds | Per-server JSON config | Zelda Easter eggs |
+| VirusTotal scanning (70+ engines) | Steam game deals & pricing | Domain blacklist/whitelist | Keyword reactions |
+| Suspicious TLD detection (.tk, .xyz, etc.) | Amazon product previews | Rate limiting & spam protection | Pot smashing animations |
+| HTTP downgrade warnings | IMDb movie details | Duplicate link detection | Cucco swarm reactions |
+| Domain age check (RDAP) | Wikipedia summaries | Trusted role bypass | Triforce reactions |
+| Executable file danger alerts | GitHub repo/code previews | Notification & audit channels | Rare item drops |
+| Redirect chain inspection | Music link aggregation (Odesli) | Command cooldowns | 5% Rickroll chance |
+| Safety score card (0-10) | Wayback Machine archiving | NSFW content warnings | |
+| URL unshortening | Academic papers (DOI, arXiv) | Manager role delegation | |
+| | npm / PyPI package info | Disabled/opt-in channels | |
+| | Stack Overflow question previews | | |
+| | Hacker News, Dev.to, Bluesky | | |
 
-The bot currently listens for and fixes links from the following domains by substituting them with community-hosted proxies:
-* **Twitter / X** -> `fixupx.com`
-* **TikTok** -> `tnktok.com`
-* **Instagram** -> `uuinstagram.com`
-* **Reddit** -> `rxddit.com`
-* **Pixiv** -> `phixiv.net`
+---
 
-### Backup Proxy Domains
-If a primary proxy domain becomes unavailable, these backup alternatives can be swapped into the code:
-* **Instagram:** `gginstagram.com`, `d.vxinstagram.com`
+## Slash Commands
 
-## Utility Features
+### 🔍 Everyone
+| Command | Description |
+|---------|-------------|
+| `/scan <url>` | Full safety scan with VirusTotal |
+| `/safety <url>` | Quick safety score check |
+| `/unshorten <url>` | Expand shortened URLs (show all hops) |
+| `/archive <url>` | Submit to Wayback Machine |
+| `/whois <domain>` | Domain registration lookup (configurable) |
+| `/stats` | Global bot usage statistics |
+| `/help` | Feature overview & command list |
+| `/config show` | View current server settings |
 
-* **Anti-Phishing Protection:** Actively parses posted domains against the live SinkingYachts API. If a known malicious Discord scam link is detected, the bot instantly deletes the message and posts a warning to protect the server.
-* **Link Unshortening:** Automatically detects shortened URLs (like `bit.ly` or `tinyurl`) and replies with the true destination link to prevent hidden redirects.
-  * <img width="994" height="832" alt="Screenshot 2026-02-22 225601" src="https://github.com/user-attachments/assets/22e0cdfa-0dd6-4cf7-a20d-d05a80901645" />
+### ⚙️ Management (Manage Server or manager role required)
+| Command | Description |
+|---------|-------------|
+| `/setup` | Interactive setup wizard |
+| `/config toggle <feature>` | Enable/disable any feature |
+| `/config threshold <1-10>` | Set safety alert sensitivity |
+| `/config notify set #channel` | Set mod notification channel |
+| `/config log set #channel` | Set audit log channel |
+| `/config manager add @role` | Delegate management to a role |
+| `/blacklist add/remove/list <domain>` | Block unwanted domains |
+| `/whitelist add/remove/list <domain>` | Allow-only mode |
+| `/trusted add/remove/list @role` | Safety bypass roles |
 
-* **Direct File Analysis:** Intercepts direct links to files (`.exe`, `.zip`, `.mp4`, etc.) and performs a secure header check to announce the exact file type and size to the channel before anyone clicks it.
-  * <img width="940" height="516" alt="Capture" src="https://github.com/user-attachments/assets/fadb7f4a-9ef6-454d-8869-182f81618b04" />
+---
 
+## Supported Embed-Fix Platforms
 
-## Zelda Easter Eggs
+LinkBot detects links from these platforms and replaces them with embed-friendly proxies, then reposts via webhook - perfectly impersonating the original author:
+
+| Platform | Proxy | Notes |
+|----------|-------|-------|
+| Twitter / X | `fixupx.com` | Supports `.translate.spanish` suffix |
+| TikTok | `tnktok.com` | |
+| Instagram | `uuinstagram.com` | Backup: `gginstagram.com`, `d.vxinstagram.com` |
+| Reddit | `rxddit.com` | |
+| Pixiv | `phixiv.net` | Supports `.translate.japanese` suffix |
+| Bluesky | `bskyx.app` | |
+| Threads | `vxthreads.net` | |
+
+YouTube Shorts are automatically converted to regular `youtube.com/watch?v=` URLs.
+
+---
+
+## How It Works - 15-Stage Pipeline
+
+Every message runs through this pipeline:
+
+```
+Channel Filter → Rate Limiting → Duplicate Check → Trusted Bypass
+→ Blacklist/Whitelist → Unshorten → Phishing Check → File Inspection
+→ Suspicious TLD → HTTP Downgrade → Domain Age → VirusTotal
+→ Safety Score Card → Enrichment → Tracking Strip → NSFW → Easter Eggs
+→ Embed Fixer (webhook repost, delete original)
+```
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Python 3.10+
+- Discord bot token with **Message Content Intent** enabled
+- (Optional) [VirusTotal API key](https://virustotal.com) (free, 500 req/day)
+- (Optional) [OMDb API key](https://omdbapi.com) (free, 1000/day)
+
+### Installation
+
+```bash
+git clone https://github.com/vegalyraevt/LinkBot.git
+cd LinkBot
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env
+# Edit .env with your DISCORD_BOT_TOKEN
+python main.py
+```
+
+**Bot Permissions Required:** Read Messages, Send Messages, Manage Messages, Manage Webhooks, Read Message History, Timeout Members (optional)
+
+---
+
+## Project Structure
+
+```
+linkbot/
+├── main.py                    # Discord Bot + 15-stage message router
+├── commands.py                # 12 slash command definitions
+├── moderation.py              # Rate limiting, duplicates, logging, cooldowns
+├── config_manager.py          # Per-server JSON config (config/{id}.json)
+├── permissions.py             # RBAC (owner / Manage Server / manager roles)
+├── stats.py                   # Global usage tracker (stats.json)
+├── blacklist.py               # Domain blacklist/whitelist enforcement
+├── channel_filter.py          # Channel allow/deny/command restriction
+├── embeds.py                  # Link fixer, tracking stripper, NSFW detection
+├── easter_eggs.py             # Zelda responses, reactions, rare drops
+├── safety/
+│   ├── __init__.py            # 7 safety check functions
+│   ├── rdap.py                # Domain age lookup (free RDAP)
+│   ├── virustotal.py          # VirusTotal API integration
+│   └── scorecard.py           # 0-10 composite safety scoring
+├── enrichment/
+│   ├── __init__.py            # Router + music + Wikipedia + Discord quotes
+│   ├── github.py              # GitHub blob/repo/user previews
+│   ├── storefronts.py         # Steam, Amazon, IMDb
+│   ├── multimedia.py          # YouTube, Twitch (oEmbed)
+│   ├── academic.py            # DOI, arXiv, npm, PyPI, Stack Overflow, Gist
+│   ├── social.py              # Hacker News, Dev.to, Bluesky
+│   └── archive.py             # Wayback Machine auto-snapshot
+├── config/
+│   └── defaults.json          # Global defaults (30+ settings)
+├── requirements.txt
+├── README.md
+├── CONTRIBUTING.md
+└── SECURITY.md
+```
+
+---
+
+## Easter Eggs
 
 The bot includes hidden *Legend of Zelda* references that trigger automatically, adding charm without interrupting normal conversations:
 
-* **Direct Ping Response:** When you mention the bot directly with `@Link`, it responds with one of the following:
-  * **55% chance:** Iconic and funny quotes from the Zelda games, the 1989 cartoon, and the CD-i spin-offs.
-  * **35% chance:** A random image from the `images/` folder.
-  * **10% chance:** A random sound from the `sounds/` folder.
-  *(Note: To use the media responses, place `.png`, `.jpg`, and `.gif` files in the `images/` folder, and `.mp3`, `.wav`, and `.ogg` files in the `sounds/` folder.)*
+### Direct Ping Response
+Mention the bot with `@LinkBot` for one of:
+- **55% chance:** Iconic quotes from Zelda games, the 1989 cartoon, and CD-i spin-offs
+- **35% chance:** A random image from the `images/` folder
+- **10% chance:** A random sound from the `sounds/` folder
+- **5% chance (on top):** Special Youtube Video! 
 
-  <img width="727" height="452" alt="Screenshot 2026-02-22 225851" src="https://github.com/user-attachments/assets/66cbe57c-905b-42f9-a226-7eb009e49546" />
+> **Setting up media responses:** Create two folders in the bot root directory: `images/` (accepts .png, .jpg, .jpeg, .gif) and `sounds/` (accepts .mp3, .wav, .ogg). These folders are gitignored. The bot picks randomly from whatever you place there. No files = text responses only.
 
-  <img width="501" height="240" alt="Screenshot 2026-02-22 225953" src="https://github.com/user-attachments/assets/a70b0bca-2d05-4ea3-b14f-5d77a3abfef4" />
+<img width="727" height="452" alt="Screenshot 2026-02-22 225851" src="https://github.com/user-attachments/assets/66cbe57c-905b-42f9-a226-7eb009e49546" />
 
+<img width="501" height="240" alt="Screenshot 2026-02-22 225953" src="https://github.com/user-attachments/assets/a70b0bca-2d05-4ea3-b14f-5d77a3abfef4" />
 
-* **Pot Reaction:** If a message contains keywords related to pots, vandalism, or theft, the bot reacts with:
-  * Custom Link emoji: `<:link:1475252964708057118>`
-  * Custom Pot emoji: `<:pot:1475279632512188718>`
-    
+### Pot Reaction
+Keywords like *pot, smash, vase, burglary, loot, destroy* trigger custom Link + Pot emoji reactions.
+
 <img width="313" height="133" alt="Screenshot 2026-02-22 230053" src="https://github.com/user-attachments/assets/9081a076-8800-484a-8750-9c8ae42d0088" />
 
-* **Cucco Reaction:** Discussing chickens or cuccos triggers a flock of poultry reactions.
-  * Chicken emoji: 🐔
-  * Custom Link emoji: `<:link:1475252964708057118>`
-    
+### Cucco Reaction
+Keywords like *cucco, chicken, peck, flock, revenge* trigger chicken + Link emoji reactions.
+
 <img width="229" height="87" alt="Screenshot 2026-02-22 230204" src="https://github.com/user-attachments/assets/f8c23af4-2e26-46ac-9194-f55b8162d8a3" />
 
-* **The Golden Goddesses Reaction:** Discussing the Triforce, courage, wisdom, power, or the Golden Goddesses triggers an animated Triforce reaction: `<a:link_triforce:1475284641513607338>`
+### Triforce Reaction
+Keywords like *wisdom, courage, power, triforce, goddess* trigger an animated Triforce emoji.
 
 <img width="172" height="76" alt="Screenshot 2026-02-22 230222" src="https://github.com/user-attachments/assets/233cba1d-0fb4-4cb5-96dc-9e8918b1b9fa" />
 
-* **Rare Item Drop:** When a link is fixed and sent via webhook, there is a 5% chance the bot appends the classic item get text to the embedded post:
-  * `*Da-da-da-daaa!* 🗝️`
+### Rare Item Drop
+When a link is fixed and reposted via webhook, there's a 5% chance of:
+> *Da-da-da-daaa!* 🗝️
 
-## Setup and Installation
+---
 
-### Prerequisites
-* Python 3.8 or higher.
-* A Discord Developer Application with a valid Bot Token.
-* The **Message Content Intent** enabled in your bot's Developer Portal settings.
+## Troubleshooting
 
-### Installation Steps
+- **Bot not responding?** Ensure **Message Content Intent** is enabled in the Discord Developer Portal.
+- **Permission errors?** Verify the bot's role has the required permissions in your server.
+- **Token issues?** Regenerate your token in the Discord Developer Portal.
+- **Slash commands not appearing?** Wait up to 1 hour for Discord to cache, or kick + re-invite the bot to force a refresh.
 
-1. **Clone the repository:**
-   git clone <your-repo-url>
-   cd LinkBot
+---
 
-2. **Create and activate a virtual environment:**
-    python3 -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
+## Contributing
 
-3. **Install dependencies:**
-    pip install -r requirements.txt
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Security professionals are especially welcome to review implementations and suggest improvements.
 
-4. **Configure your bot token:**
-    cp .env.example .env
-    # Edit .env and add your Discord bot token
-    nano .env
-    
-5. **Run the bot:**
-    python3 main.py
+---
 
-### Bot Permissions Required
-Make sure your bot has at least these permissions in Discord:
-(others are asked for, but theyre for planned features later.)
+## Security
 
-    - Read Messages/View Channels
-    - Send Messages
-    - Manage Messages (to delete the original posts)
-    - Manage Webhooks
-    - Read Message History
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and safe harbor.
 
-### Troubleshooting
-Bot not responding? Ensure the Message Content Intent is enabled in the Discord Developer Portal.
-Permission errors? Check that the bot's role actually has the required permissions in your specific server.
-Token issues? If the bot fails to log in, regenerate your token in the Discord Developer Portal immediately.
+---
 
-### License
+## Disclaimer
+
+The Legend of Zelda, Link, and all related properties are trademarks of Nintendo Co., Ltd. This project is not affiliated with, endorsed by, or sponsored by Nintendo. All Zelda-related references are used as fan tribute only in a free, non-commercial project.
+
+---
+
+## License
+
 MIT
+
+---
+
+<sub>This project was developed by me, a solo developer who wanted this project to exist not because I'm an expert in security, but because Discord servers deserve better link safety. Also note AI tools (Deepseek, Qwen via local LLM, and Cursor) were used to assist with some feature implementations and debugging.</sub>
