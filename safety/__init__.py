@@ -86,6 +86,8 @@ async def unshorten_links(message: discord.Message) -> None:
                                 location = resp.headers.get('Location', '')
                                 if not location:
                                     break
+                                # Strip trailing punctuation that shorteners sometimes include
+                                location = location.rstrip(',; ')
                                 location = urljoin(current_url, location)
                                 redirect_chain.append(location)
                                 current_url = location

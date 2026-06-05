@@ -135,11 +135,23 @@ async def cmd_unshorten(interaction: discord.Interaction, url: str):
                         current_url = location
                     else:
                         break
-        hops_text = '\n'.join(f"- {u}" for u in redirect_chain)
+        actual_hops = len(redirect_chain) - 1
+        numbered = '\n'.join(f"{i+1}. {u}" for i, u in enumerate(redirect_chain))
+        last_url = redirect_chain[-1] if redirect_chain else url
+        last_host = last_url.split('//')[-1].split('/')[0].lower() if '//' in last_url else ''
+        # Check if final destination is also a known shortener
+        from shared_constants import SHORTENER_DOMAINS as _SDS
+        is_short_end = last_host in _SDS or any(last_host.endswith('.'+d) for d in _SDS)
+        desc = f"**{actual_hops} redirects followed:**\n\n{numbered}"
+        if is_short_end:
+            desc += f"\n\n**Warning:** The final destination ({last_url}) is also a known link shortener. This chain may continue beyond what the bot can follow (JavaScript redirects are invisible to HTTP clients). Do not click unless you trust every link in this chain."
+            embed_color = discord.Color.orange()
+        else:
+            embed_color = discord.Color.blue()
         embed = discord.Embed(
             title="URL Unshortened",
-            description=f"**Redirect chain ({len(redirect_chain)} hops):**\n\n{url}\n{hops_text}",
-            color=discord.Color.blue(),
+            description=desc,
+            color=embed_color,
         )
         await interaction.followup.send(embed=embed)
     except Exception as e:
