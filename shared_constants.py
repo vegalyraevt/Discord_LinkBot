@@ -28,9 +28,8 @@ SHORTENER_DOMAINS = {
     'tiny.pl', 'cutt.it', 'sh.st', 'cpmlink.net', 'fas.li', 'al.ly',
     'qr.net', '1url.com', 'om.ly', 'bit.do', 'shorte.st', 'adpop.me',
     'fc.lc', 'exe.io', 'db.tt',
-    # Claude additions
     'youtu.be', 'fb.me', 'ift.tt', 'dlvr.it', 'owl.li', 'hubs.ly',
-    'go.microsoft.com', 'go.aws', 'pages.link', 'sub2unlock.com',
+    'pages.link', 'sub2unlock.com',
     'linkvertise.com', 'direct-link.net', 'shr.ink', 'ouo.press',
     'ppt.cc', 'short.pe', 'n9.cl', 'osdb.link', '1pt.co',
 }

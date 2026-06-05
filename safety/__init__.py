@@ -11,6 +11,8 @@ Includes:
   - Domain age checker via RDAP
   - VirusTotal scanner
   - Composite safety score card
+
+All threat intelligence data from shared_constants.py (single source of truth).
 """
 
 import os
@@ -19,6 +21,10 @@ import aiohttp
 from urllib.parse import urlparse, urljoin
 from typing import Optional, List, Tuple
 
+from shared_constants import (
+    SHORTENER_DOMAINS, SUSPICIOUS_TLDS,
+    FILE_EXTENSIONS, DANGEROUS_EXTENSIONS
+)
 from safety import rdap
 from safety import virustotal
 from safety import scorecard
@@ -27,84 +33,31 @@ import discord
 import stats
 
 
-# Known URL shortener domains
-SHORTENER_DOMAINS = {
-    'bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'is.gd', 'buff.ly',
-    'j.mp', 'cutt.ly', 'rb.gy', 'shrtco.de', 'v.gd', 'bl.ink', 't2m.io',
-    'qr.ae', 'snip.ly', 'clk.im', 'rebrand.ly', 'short.gy', 'cutt.us',
-    'soo.gd', 's.id', 'adf.ly', 'lnkd.in', 'amzn.to', 'wp.me',
-    't.me', 'b.link', 'tiny.cc', 'shorturl.at', 'cli.re',
-    'short.link', 'gg.gg', 'kutt.it', 'han.gl', 'zws.im', 'rotf.lol', 'tilt.fyi',
-    't.ly', 'dub.co', 'goo.su', 'qrco.de', 'linktr.ee', 'short.io',
-    'tiny.one', 'clck.ru', 'zpr.io', 'gns.io', 'x.co', 'ity.im',
-    'q.gs', 'po.st', 'bc.vc', 'u.to', 'su.pr', 'cur.lv', 'dft.ba', 'aka.ms',
-    't.cn', 'vk.cc', 'ouo.io', 'za.gl', 'shrinke.me', 'clicks.su',
-    'trib.al', 'wa.link', 'vzturl.com', 'tr.im', 'url.ie',
-    'tiny.pl', 'cutt.it', 'sh.st', 'cpmlink.net', 'fas.li', 'al.ly',
-    'qr.net', '1url.com', 'om.ly', 'bit.do', 'shorte.st', 'adpop.me',
-    'fc.lc', 'exe.io', 'db.tt',
-}
-
-# Direct file extensions to inspect
-FILE_EXTENSIONS = (
-    '.zip', '.rar', '.7z', '.tar', '.gz', '.tgz', '.bz2', '.xz', '.iso', '.dmg', '.cab',
-    '.img', '.vhd', '.vhdx', '.wim',
-    '.exe', '.msi', '.apk', '.app', '.bat', '.cmd', '.sh', '.vbs', '.ps1', '.scr', '.jar', '.pif',
-    '.com', '.cpl', '.wsf', '.hta', '.jse', '.vbe', '.psm1', '.psd1',
-    '.lnk', '.url', '.scf', '.iqy',
-    '.mp4', '.mkv', '.avi', '.mov', '.webm', '.mp3', '.wav', '.flac', '.ogg',
-    '.pdf', '.doc', '.docx', '.docm', '.xls', '.xlsx', '.xlsm', '.ppt', '.pptx', '.pptm',
-    '.rtf', '.chm', '.js', '.msp', '.appx', '.pkg', '.deb', '.rpm', '.py', '.pyw', '.rb', '.pl'
-)
-
-# Executable / dangerous file extensions
-DANGEROUS_EXTENSIONS = {
-    '.exe', '.msi', '.apk', '.bat', '.cmd', '.sh', '.vbs', '.ps1', '.scr', '.pif',
-    '.com', '.cpl', '.wsf', '.hta', '.jse', '.vbe', '.psm1', '.psd1',
-    '.lnk', '.url', '.scf', '.iqy',
-    '.iso', '.img', '.vhd', '.vhdx',
-    '.rtf', '.chm', '.js', '.msp', '.appx', '.py', '.pyw', '.rb', '.pl'
-}
-
-# Suspicious TLDs
-SUSPICIOUS_TLDS = {
-    '.tk', '.ml', '.ga', '.cf', '.gq',
-    '.xyz', '.top', '.click', '.work',
-    '.bar', '.rest', '.hair', '.makeup',
-    '.cyou', '.cfd', '.sbs', '.icu',
-    '.bond', '.cam', '.shop', '.store', '.vip', '.online', '.site', '.biz',
-    '.zip', '.mov', '.cc', '.cn', '.vu', '.su',
-    '.live', '.monster', '.quest', '.stream', '.download',
-    '.racing', '.win', '.loan', '.men', '.bid', '.date',
-    '.trade', '.party', '.science', '.review', '.country',
-    '.pro', '.email', '.gdn', '.ws',
-}
-
 # General URL regex
 GENERAL_URL_REGEX = re.compile(r'https?://(?:www\.)?([^/\s]+)(/[^\s]*[^\s\)\]>.,!?])?')
 
 
 async def check_phishing(message: discord.Message) -> bool:
     """Check URLs against SinkingYachts phishing API. Returns True if malicious."""
-    for raw_url in re.findall(r'https?://[^\s\)\]>]+', message.content):
-        hostname = urlparse(raw_url).hostname
-        if not hostname:
-            continue
-        try:
-            async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession() as session:
+        for raw_url in re.findall(r'https?://[^\s\)\]>]+', message.content):
+            hostname = urlparse(raw_url).hostname
+            if not hostname:
+                continue
+            try:
                 async with session.get(
                     f"https://phish.sinking.yachts/v2/check/{hostname}",
                     timeout=aiohttp.ClientTimeout(total=3)
                 ) as resp:
                     is_malicious = await resp.json()
-            if is_malicious is True:
-                await message.delete()
-                await stats.increment("malicious_blocked")
-                await stats.increment("messages_deleted")
-                await message.channel.send("Malicious link removed to protect the kingdom. HYYYAAAAAHHH!")
-                return True
-        except Exception:
-            pass
+                if is_malicious is True:
+                    await message.delete()
+                    await stats.increment("malicious_blocked")
+                    await stats.increment("messages_deleted")
+                    await message.channel.send("Malicious link removed to protect the kingdom. HYYYAAAAAHHH!")
+                    return True
+            except Exception:
+                pass
     return False
 
 
@@ -113,7 +66,7 @@ async def unshorten_links(message: discord.Message) -> None:
     url_matches = GENERAL_URL_REGEX.findall(message.content)
     for domain, path in url_matches:
         domain_lower = domain.lower()
-        # Fix: also match subdomains on shortener services (e.g. sub.bit.ly)
+        # Also match subdomains on shortener services (e.g. sub.bit.ly)
         is_shortener = domain_lower in SHORTENER_DOMAINS or any(
             domain_lower.endswith(f".{d}") for d in SHORTENER_DOMAINS
         )
@@ -133,14 +86,13 @@ async def unshorten_links(message: discord.Message) -> None:
                                 location = resp.headers.get('Location', '')
                                 if not location:
                                     break
-                                # Fix: use urljoin to safely resolve all relative paths (RFC 3986)
                                 location = urljoin(current_url, location)
                                 redirect_chain.append(location)
                                 current_url = location
                             else:
                                 break
                 if len(redirect_chain) == 1:
-                    await message.reply(f"shortened link detected! for safety heres what it is linking too! {redirect_chain[0]}")
+                    await message.reply("Shortened link detected, but the destination could not be followed (possibly a JavaScript redirect). Proceed with caution.")
                 elif len(redirect_chain) > 3:
                     embed = discord.Embed(
                         title="Shortened Link - Redirect Chain Detected",
@@ -164,8 +116,7 @@ async def inspect_files(message: discord.Message, config: dict = None) -> None:
     for domain, path in url_matches:
         if not path:
             continue
-        # Fix: strip query strings before evaluating the file extension
-        # Previously: malware.exe?download=1 would NOT match .exe (bypass)
+        # Strip query strings before evaluating the file extension
         clean_path = urlparse(path).path.lower()
         if clean_path.endswith(FILE_EXTENSIONS):
             file_url = f"https://{domain}{path}"
@@ -211,18 +162,19 @@ async def warn_suspicious_tld(message: discord.Message, config: dict = None) -> 
     if not config.get("suspicious_tld_warn", True):
         return
     warned_domains = set()
-    for raw_url in re.findall(r'https?://[^\s\)\]>]+', message.content):
-        hostname = urlparse(raw_url).hostname
-        if not hostname:
-            continue
-        hostname_clean = hostname.lower().removeprefix("www.")
-        if hostname_clean in warned_domains:
-            continue
-        if check_suspicious_tld(hostname_clean):
-            warned_domains.add(hostname_clean)
-            embed = discord.Embed(title="Suspicious Domain Detected", description=f"The domain `{hostname_clean}` uses a TLD frequently associated with phishing/malware.\n\n`{raw_url}`\n\n*Exercise caution.*", color=discord.Color.orange())
-            await message.channel.send(embed=embed)
-            await stats.increment("safety_cards_shown")
+    async with aiohttp.ClientSession() as session:
+        for raw_url in re.findall(r'https?://[^\s\)\]>]+', message.content):
+            hostname = urlparse(raw_url).hostname
+            if not hostname:
+                continue
+            hostname_clean = hostname.lower().removeprefix("www.")
+            if hostname_clean in warned_domains:
+                continue
+            if check_suspicious_tld(hostname_clean):
+                warned_domains.add(hostname_clean)
+                embed = discord.Embed(title="Suspicious Domain Detected", description=f"The domain `{hostname_clean}` uses a TLD frequently associated with phishing/malware.\n\n`{raw_url}`\n\n*Exercise caution.*", color=discord.Color.orange())
+                await message.channel.send(embed=embed)
+                await stats.increment("safety_cards_shown")
 
 
 async def warn_http_downgrade(message: discord.Message, config: dict = None) -> None:
@@ -230,25 +182,30 @@ async def warn_http_downgrade(message: discord.Message, config: dict = None) -> 
         config = {}
     if not config.get("http_downgrade_warn", True):
         return
+    # All common TLDs expect HTTPS, except local/private addresses
+    COMMON_TLDS = ('.com', '.org', '.net', '.io', '.dev', '.app',
+                   '.gov', '.edu', '.co', '.uk', '.ca', '.de', '.fr', '.au',
+                   '.info', '.biz', '.us', '.me', '.tv', '.cc')
     warned_domains = set()
-    for raw_url in re.findall(r'https?://[^\s\)\]>]+', message.content):
-        if not raw_url.startswith('http://'):
-            continue
-        hostname = urlparse(raw_url).hostname
-        if not hostname:
-            continue
-        hostname_clean = hostname.lower().removeprefix("www.")
-        if hostname_clean in warned_domains:
-            continue
-        https_expected = hostname_clean.endswith(('.com', '.org', '.net', '.io', '.dev', '.app'))
-        if hostname_clean in ('localhost', '127.0.0.1') or hostname_clean.startswith('192.168.'):
-            https_expected = False
-        if https_expected:
-            warned_domains.add(hostname_clean)
-            https_url = raw_url.replace('http://', 'https://', 1)
-            embed = discord.Embed(title="Insecure Connection Warning", description=f"`{raw_url}` is using an **unencrypted HTTP** connection.\n\nTry HTTPS instead: `{https_url}`", color=discord.Color.yellow())
-            await message.channel.send(embed=embed)
-            await stats.increment("safety_cards_shown")
+    async with aiohttp.ClientSession() as session:
+        for raw_url in re.findall(r'https?://[^\s\)\]>]+', message.content):
+            if not raw_url.startswith('http://'):
+                continue
+            hostname = urlparse(raw_url).hostname
+            if not hostname:
+                continue
+            hostname_clean = hostname.lower().removeprefix("www.")
+            if hostname_clean in warned_domains:
+                continue
+            https_expected = hostname_clean.endswith(COMMON_TLDS)
+            if hostname_clean in ('localhost', '127.0.0.1') or hostname_clean.startswith('192.168.'):
+                https_expected = False
+            if https_expected:
+                warned_domains.add(hostname_clean)
+                https_url = raw_url.replace('http://', 'https://', 1)
+                embed = discord.Embed(title="Insecure Connection Warning", description=f"`{raw_url}` is using an **unencrypted HTTP** connection.\n\nTry HTTPS instead: `{https_url}`", color=discord.Color.yellow())
+                await message.channel.send(embed=embed)
+                await stats.increment("safety_cards_shown")
 
 
 async def warn_new_domain(message: discord.Message, config: dict = None) -> bool:
@@ -288,6 +245,7 @@ async def warn_new_domain(message: discord.Message, config: dict = None) -> bool
                 embed = discord.Embed(title="New Domain Blocked", description=f"**{message.author.mention}, your link was removed.**\n\nThe domain `{hostname_clean}` was registered only **{age_days} day(s)** ago.\nRegistered: {result['registered_date'][:10]}\nRegistrar: {result.get('registrar', 'Unknown')}", color=discord.Color.red())
                 await message.channel.send(embed=embed, delete_after=15)
                 blocked = True
+                break  # Message already deleted, stop processing
             else:
                 embed = discord.Embed(title="New Domain Warning", description=f"The domain `{hostname_clean}` was registered only **{age_days} day(s)** ago.\n\n`{raw_url}`\n\n*New domains are frequently used for phishing.*\nRegistered: {result['registered_date'][:10]}", color=discord.Color.orange())
                 await message.channel.send(embed=embed)

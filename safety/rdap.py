@@ -36,7 +36,6 @@ RDAP_SERVERS = {
     'store': 'https://rdap.centralnic.com/store/',
     'app': 'https://rdap.nic.google/',
     'dev': 'https://rdap.nic.google/',
-    'dev': 'https://rdap.nic.google/',
     'gg': 'https://rdap.nic.gg/',
     'me': 'https://rdap.nic.me/',
     'tv': 'https://rdap.nic.tv/',
@@ -45,13 +44,32 @@ RDAP_SERVERS = {
 
 IANA_BOOTSTRAP_URL = "https://data.iana.org/rdap/dns.json"
 
+# Two-part TLDs (SLD+ccTLD structure) - heuristic for domain splitting
+# Full list from Mozilla PSL would need tldextract; this covers most common cases
+TWO_PART_TLDS = {
+    'co.uk', 'org.uk', 'me.uk', 'ltd.uk', 'plc.uk', 'net.uk', 'ac.uk', 'gov.uk',
+    'co.jp', 'or.jp', 'ne.jp', 'ac.jp', 'ad.jp', 'go.jp',
+    'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au',
+    'co.nz', 'net.nz', 'org.nz',
+    'co.za', 'web.za', 'org.za',
+    'co.il', 'org.il', 'net.il', 'ac.il', 'gov.il',
+    'co.in', 'net.in', 'org.in', 'gen.in', 'firm.in', 'ind.in',
+    'com.br', 'net.br', 'org.br', 'gov.br',
+    'co.at', 'or.at',
+    'co.kr', 'or.kr', 'ne.kr',
+    'com.cn', 'net.cn', 'org.cn', 'gov.cn',
+    'com.tw', 'net.tw', 'org.tw',
+    'com.mx', 'net.mx', 'org.mx',
+    'co.id', 'net.id', 'or.id', 'web.id',
+}
+
 
 async def _get_rdap_url(tld: str) -> Optional[str]:
     """Get the RDAP server URL for a TLD."""
     if tld in RDAP_SERVERS:
         return RDAP_SERVERS[tld]
 
-    # Fallback: query IANA bootstrap
+    # Fallback: query IANA bootstrap (RFC 7484)
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
@@ -60,9 +78,16 @@ async def _get_rdap_url(tld: str) -> Optional[str]:
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json(content_type=None)
-                    for service in data.get("services", []):
-                        if tld in service.get("tlds", []):
-                            return service["tlds"][0]
+                    for entry in data.get("services", []):
+                        # IANA format: [[tld_list], [url_list]] per RFC 7484
+                        if isinstance(entry, list) and len(entry) >= 2:
+                            tlds_list, servers_list = entry[0], entry[1]
+                            if tld in tlds_list:
+                                return servers_list[0]
+                        # Some registries use dict format
+                        elif isinstance(entry, dict):
+                            if tld in entry.get("tlds", []):
+                                return entry["tlds"][0]
     except Exception:
         pass
     return None
@@ -74,9 +99,21 @@ async def query_domain(domain: str) -> Optional[Dict[str, Any]]:
     Returns a dict with keys: domain, registered_date, registrar, nameservers, status
     or None if lookup fails.
     """
-    hostname = domain.lower().removeprefix("www.").split(".")[0]
-    tld = domain.lower().removeprefix("www.").rsplit(".", 1)[-1] if "." in domain else "com"
-    
+    clean = domain.lower().removeprefix("www.")
+    parts = clean.split(".")
+
+    # Determine TLD (handle multi-part TLDs like co.uk, com.au)
+    tld = parts[-1]
+    sld = ""
+    if len(parts) >= 3 and f"{parts[-2]}.{parts[-1]}" in TWO_PART_TLDS:
+        tld = f"{parts[-2]}.{parts[-1]}"
+        sld = ".".join(parts[:-2]) if len(parts) > 2 else parts[0]
+    else:
+        sld = ".".join(parts[:-1]) if len(parts) > 1 else parts[0]
+
+    # For the RDAP query, use the registered domain part (eTLD+1 format)
+    hostname = sld.split(".")[-1] if sld else (parts[0] if parts else clean)
+
     rdap_url = await _get_rdap_url(tld)
     if not rdap_url:
         return None
@@ -89,7 +126,7 @@ async def query_domain(domain: str) -> Optional[Dict[str, Any]]:
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json(content_type=None)
-                    
+
                     # Extract registration date
                     registered_date = None
                     for event in data.get("events", []):
@@ -136,7 +173,6 @@ def get_domain_age_days(registered_date: Optional[str]) -> Optional[int]:
     if not registered_date:
         return None
     try:
-        # RDAP dates are ISO 8601: 2024-01-15T12:00:00Z
         reg_date = datetime.fromisoformat(registered_date.replace("Z", "+00:00"))
         now = datetime.now(timezone.utc)
         delta = now - reg_date
