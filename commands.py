@@ -263,6 +263,18 @@ async def cmd_help(interaction: discord.Interaction):
 
 # ===== MANAGEMENT COMMANDS =====
 
+async def config_autocomplete(interaction: discord.Interaction, current: str):
+    valid = [
+        "easter_eggs", "reactions", "file_warnings", "file_auto_delete",
+        "suspicious_tld_warn", "http_downgrade_warn", "domain_age_warn",
+        "domain_age_block", "nsfw_warning",
+    ]
+    return [
+        app_commands.Choice(name=n, value=n)
+        for n in valid if current.lower() in n.lower()
+    ]
+
+
 @app_commands.command(name="config", description="View or change server configuration")
 @app_commands.describe(action="What to do", option="Feature or setting name", value="Value to set")
 @app_commands.choices(action=[
@@ -274,6 +286,7 @@ async def cmd_help(interaction: discord.Interaction):
     app_commands.Choice(name="Add a manager role", value="manager_add"),
     app_commands.Choice(name="Remove a manager role", value="manager_remove"),
 ])
+@app_commands.autocomplete(option=config_autocomplete)
 async def cmd_config(
     interaction: discord.Interaction,
     action: app_commands.Choice[str],
