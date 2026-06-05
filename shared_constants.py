@@ -20,7 +20,7 @@ SHORTENER_DOMAINS = {
     'soo.gd', 's.id', 'adf.ly', 'lnkd.in', 'amzn.to', 'wp.me',
     't.me', 'b.link', 'tiny.cc', 'shorturl.at', 'cli.re',
     'short.link', 'gg.gg', 'kutt.it', 'han.gl', 'zws.im', 'rotf.lol', 'tilt.fyi',
-    't.ly', 'dub.co', 'goo.su', 'qrco.de', 'linktr.ee', 'short.io',
+    't.ly', 'tinu.be', 'py.md', 'dub.co', 'goo.su', 'qrco.de', 'linktr.ee', 'short.io',
     'tiny.one', 'clck.ru', 'zpr.io', 'gns.io', 'x.co', 'ity.im',
     'q.gs', 'po.st', 'bc.vc', 'u.to', 'su.pr', 'cur.lv', 'dft.ba', 'aka.ms',
     't.cn', 'vk.cc', 'ouo.io', 'za.gl', 'shrinke.me', 'clicks.su',

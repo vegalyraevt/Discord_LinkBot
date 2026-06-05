@@ -95,16 +95,19 @@ async def unshorten_links(message: discord.Message) -> None:
                                 break
                 if len(redirect_chain) == 1:
                     await message.reply("Shortened link detected, but the destination could not be followed (possibly a JavaScript redirect). Proceed with caution.")
-                elif len(redirect_chain) > 3:
-                    embed = discord.Embed(
-                        title="Shortened Link - Redirect Chain Detected",
-                        description=f"This shortened link went through **{len(redirect_chain)} hops**.\n\n" + '\n'.join(f"{i}. {url}" for i, url in enumerate(redirect_chain, 1)),
-                        color=discord.Color.orange()
-                    )
-                    await message.reply(embed=embed, mention_author=False)
                 else:
-                    hops_text = '\n'.join(f"-> {url}" for url in redirect_chain[1:])
-                    await message.reply(f"**Redirect chain:**\n{short_url}\n{hops_text}")
+                    actual_hops = len(redirect_chain) - 1
+                    numbered = '\n'.join(f"{i+1}. {u}" for i, u in enumerate(redirect_chain))
+                    last_url = redirect_chain[-1]
+                    last_host = last_url.split('//')[-1].split('/')[0].lower() if '//' in last_url else ''
+                    is_short_end = last_host in SHORTENER_DOMAINS or any(last_host.endswith('.'+d) for d in SHORTENER_DOMAINS)
+                    desc = f"**{actual_hops} redirects followed:**\n\n{numbered}"
+                    if is_short_end:
+                        desc += f"\n\n**Warning:** The final destination ({last_url}) is also a known link shortener. This chain may continue beyond what the bot can follow (JavaScript redirects are invisible to HTTP clients). Do not click unless you trust every link in this chain."
+                        color = discord.Color.orange()
+                        await message.reply(embed=discord.Embed(title="Shortened Link - Unresolved Chain Detected", description=desc, color=color), mention_author=False)
+                    else:
+                        await message.reply(f"**Redirect chain:**\n{numbered}")
                 await stats.increment("links_unshortened")
             except Exception as e:
                 print(f"Failed to unshorten URL {short_url}: {e}")
