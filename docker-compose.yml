@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  linkbot:
+    build: .
+    container_name: discord-linkbot
+    restart: unless-stopped
+
+    # Persistent data volumes
+    volumes:
+      - linkbot_data:/app/config
+      - ./images:/app/images:ro
+      - ./sounds:/app/sounds:ro
+      - ./.env:/app/.env:ro
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    # Logging configuration
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+    stdin_open: false
+    tty: false
+
+volumes:
+  linkbot_data:
