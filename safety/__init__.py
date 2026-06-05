@@ -16,7 +16,7 @@ Includes:
 import os
 import re
 import aiohttp
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from typing import Optional, List, Tuple
 
 from safety import rdap
@@ -33,19 +33,38 @@ SHORTENER_DOMAINS = {
     'j.mp', 'cutt.ly', 'rb.gy', 'shrtco.de', 'v.gd', 'bl.ink', 't2m.io',
     'qr.ae', 'snip.ly', 'clk.im', 'rebrand.ly', 'short.gy', 'cutt.us',
     'soo.gd', 's.id', 'adf.ly', 'lnkd.in', 'amzn.to', 'wp.me',
-    't.me', 'b.link', 'tiny.cc', 'shorturl.at', 'cli.re'
+    't.me', 'b.link', 'tiny.cc', 'shorturl.at', 'cli.re',
+    'short.link', 'gg.gg', 'kutt.it', 'han.gl', 'zws.im', 'rotf.lol', 'tilt.fyi',
+    't.ly', 'dub.co', 'goo.su', 'qrco.de', 'linktr.ee', 'short.io',
+    'tiny.one', 'clck.ru', 'zpr.io', 'gns.io', 'x.co', 'ity.im',
+    'q.gs', 'po.st', 'bc.vc', 'u.to', 'su.pr', 'cur.lv', 'dft.ba', 'aka.ms',
+    't.cn', 'vk.cc', 'ouo.io', 'za.gl', 'shrinke.me', 'clicks.su',
+    'trib.al', 'wa.link', 'vzturl.com', 'tr.im', 'url.ie',
+    'tiny.pl', 'cutt.it', 'sh.st', 'cpmlink.net', 'fas.li', 'al.ly',
+    'qr.net', '1url.com', 'om.ly', 'bit.do', 'shorte.st', 'adpop.me',
+    'fc.lc', 'exe.io', 'db.tt',
 }
 
 # Direct file extensions to inspect
 FILE_EXTENSIONS = (
     '.zip', '.rar', '.7z', '.tar', '.gz', '.tgz', '.bz2', '.xz', '.iso', '.dmg', '.cab',
+    '.img', '.vhd', '.vhdx', '.wim',
     '.exe', '.msi', '.apk', '.app', '.bat', '.cmd', '.sh', '.vbs', '.ps1', '.scr', '.jar', '.pif',
+    '.com', '.cpl', '.wsf', '.hta', '.jse', '.vbe', '.psm1', '.psd1',
+    '.lnk', '.url', '.scf', '.iqy',
     '.mp4', '.mkv', '.avi', '.mov', '.webm', '.mp3', '.wav', '.flac', '.ogg',
-    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.xlsm', '.ppt', '.pptx'
+    '.pdf', '.doc', '.docx', '.docm', '.xls', '.xlsx', '.xlsm', '.ppt', '.pptx', '.pptm',
+    '.rtf', '.chm', '.js', '.msp', '.appx', '.pkg', '.deb', '.rpm', '.py', '.pyw', '.rb', '.pl'
 )
 
 # Executable / dangerous file extensions
-DANGEROUS_EXTENSIONS = {'.exe', '.msi', '.apk', '.bat', '.cmd', '.sh', '.vbs', '.ps1', '.scr', '.pif'}
+DANGEROUS_EXTENSIONS = {
+    '.exe', '.msi', '.apk', '.bat', '.cmd', '.sh', '.vbs', '.ps1', '.scr', '.pif',
+    '.com', '.cpl', '.wsf', '.hta', '.jse', '.vbe', '.psm1', '.psd1',
+    '.lnk', '.url', '.scf', '.iqy',
+    '.iso', '.img', '.vhd', '.vhdx',
+    '.rtf', '.chm', '.js', '.msp', '.appx', '.py', '.pyw', '.rb', '.pl'
+}
 
 # Suspicious TLDs
 SUSPICIOUS_TLDS = {
@@ -53,6 +72,12 @@ SUSPICIOUS_TLDS = {
     '.xyz', '.top', '.click', '.work',
     '.bar', '.rest', '.hair', '.makeup',
     '.cyou', '.cfd', '.sbs', '.icu',
+    '.bond', '.cam', '.shop', '.store', '.vip', '.online', '.site', '.biz',
+    '.zip', '.mov', '.cc', '.cn', '.vu', '.su',
+    '.live', '.monster', '.quest', '.stream', '.download',
+    '.racing', '.win', '.loan', '.men', '.bid', '.date',
+    '.trade', '.party', '.science', '.review', '.country',
+    '.pro', '.email', '.gdn', '.ws',
 }
 
 # General URL regex
@@ -87,7 +112,12 @@ async def unshorten_links(message: discord.Message) -> None:
     """Detect and unshorten shortened URLs, showing full redirect chain."""
     url_matches = GENERAL_URL_REGEX.findall(message.content)
     for domain, path in url_matches:
-        if domain.lower() in SHORTENER_DOMAINS:
+        domain_lower = domain.lower()
+        # Fix: also match subdomains on shortener services (e.g. sub.bit.ly)
+        is_shortener = domain_lower in SHORTENER_DOMAINS or any(
+            domain_lower.endswith(f".{d}") for d in SHORTENER_DOMAINS
+        )
+        if is_shortener:
             short_url = f"https://{domain}{path or ''}"
             try:
                 redirect_chain = [short_url]
@@ -103,9 +133,8 @@ async def unshorten_links(message: discord.Message) -> None:
                                 location = resp.headers.get('Location', '')
                                 if not location:
                                     break
-                                if location.startswith('/'):
-                                    parsed = urlparse(current_url)
-                                    location = f"{parsed.scheme}://{parsed.netloc}{location}"
+                                # Fix: use urljoin to safely resolve all relative paths (RFC 3986)
+                                location = urljoin(current_url, location)
                                 redirect_chain.append(location)
                                 current_url = location
                             else:
@@ -133,9 +162,14 @@ async def inspect_files(message: discord.Message, config: dict = None) -> None:
         config = {}
     url_matches = GENERAL_URL_REGEX.findall(message.content)
     for domain, path in url_matches:
-        if path and path.lower().endswith(FILE_EXTENSIONS):
+        if not path:
+            continue
+        # Fix: strip query strings before evaluating the file extension
+        # Previously: malware.exe?download=1 would NOT match .exe (bypass)
+        clean_path = urlparse(path).path.lower()
+        if clean_path.endswith(FILE_EXTENSIONS):
             file_url = f"https://{domain}{path}"
-            ext = os.path.splitext(path)[1].lower()
+            ext = os.path.splitext(clean_path)[1]
             is_dangerous = ext in DANGEROUS_EXTENSIONS
             try:
                 async with aiohttp.ClientSession() as session:
