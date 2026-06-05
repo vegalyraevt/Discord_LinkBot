@@ -5,10 +5,6 @@ Scores each link on a 0-10 scale based on multiple risk factors.
 The score card only auto-displays when the total meets or exceeds
 the server's configured threshold (default: 6).
 
-Individual checks are fast (regex/TLD matching); heavy checks
-(RDAP, VirusTotal) are referenced from results collected earlier
-in the on_message pipeline.
-
 Scoring weights:
   +10  Phishing domain (SinkingYachts) - instant delete, card not shown
   +8   VirusTotal >= 3 engines flagged
@@ -17,8 +13,13 @@ Scoring weights:
   +3   Plain HTTP on HTTPS-capable site
   +3   Redirect chain >= 3 hops
   +2   VirusTotal 1-2 engines flagged
+  +2   Brand impersonation in subdomain
+  +2   IDN/punycode domain
   +1   Known URL shortener domain
   +1   Non-standard port in URL
+  +1   IP address URL
+  +1   Credentials in URL
+  +1   Excessive subdomains (>= 3)
 """
 
 import re
@@ -28,23 +29,7 @@ from typing import Dict, Optional, List, Tuple
 import discord
 import stats
 
-
-# Known URL shortener domains (for scoring)
-SHORTENER_DOMAINS = {
-    'bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'is.gd', 'buff.ly',
-    'j.mp', 'cutt.ly', 'rb.gy', 'shrtco.de', 'v.gd', 'bl.ink', 't2m.io',
-    'qr.ae', 'snip.ly', 'clk.im', 'rebrand.ly', 'short.gy', 'cutt.us',
-    'soo.gd', 's.id', 'adf.ly', 'lnkd.in', 'amzn.to', 'wp.me',
-    't.me', 'b.link', 'tiny.cc', 'shorturl.at', 'cli.re'
-}
-
-# Suspicious TLDs
-SUSPICIOUS_TLDS = {
-    '.tk', '.ml', '.ga', '.cf', '.gq',
-    '.xyz', '.top', '.click', '.work',
-    '.bar', '.rest', '.hair', '.makeup',
-    '.cyou', '.cfd', '.sbs', '.icu',
-}
+import shared_constants
 
 # Non-standard ports that raise suspicion
 SUSPICIOUS_PORTS = {21, 22, 23, 25, 445, 1433, 3306, 3389, 4444, 5555, 5900, 6379, 8080, 8443, 8888, 9000}
@@ -63,7 +48,7 @@ def calculate_score(url: str, vt_result: Optional[Dict] = None, domain_age_days:
     tld = "." + hostname.rsplit(".", 1)[-1] if "." in hostname else ""
 
     # +4: Suspicious TLD
-    if tld in SUSPICIOUS_TLDS:
+    if tld in shared_constants.SUSPICIOUS_TLDS:
         score += 4
         reasons.append(f"Suspicious TLD (`{tld}`)")
 
@@ -79,19 +64,57 @@ def calculate_score(url: str, vt_result: Optional[Dict] = None, domain_age_days:
         reasons.append(f"Redirect chain ({redirect_hops} hops)")
 
     # +1: Known URL shortener
-    if hostname in SHORTENER_DOMAINS:
+    if hostname in shared_constants.SHORTENER_DOMAINS:
         score += 1
         reasons.append("URL shortener detected")
 
     # +1: Non-standard port
     if parsed.port and parsed.port in SUSPICIOUS_PORTS:
         score += 1
-        reasons.append(f"Non-standard port (:{{parsed.port}})")
+        reasons.append(f"Non-standard port (:{parsed.port})")
 
     # +5: Domain registered < 30 days ago
     if domain_age_days is not None and domain_age_days < 30:
         score += 5
         reasons.append(f"Domain only {domain_age_days} day(s) old")
+
+    # +1: IP address URL
+    if hostname:
+        import ipaddress
+        try:
+            ipaddress.ip_address(hostname)
+            # Only flag non-private IPs
+            if not ipaddress.ip_address(hostname).is_private:
+                score += 1
+                reasons.append("Direct IP address URL")
+        except ValueError:
+            pass
+
+    # +1: Credentials in URL
+    if parsed.username or parsed.password:
+        score += 1
+        reasons.append("Embedded credentials in URL")
+
+    # +2: IDN/punycode domain
+    if 'xn--' in hostname:
+        score += 2
+        reasons.append("Internationalized domain (potential homograph attack)")
+
+    # +2: Brand impersonation in subdomain
+    parts = hostname.split(".")
+    if len(parts) >= 3:
+        registered_domain = parts[-2] if len(parts) >= 2 else hostname
+        subdomain_parts = parts[:-2] if len(parts) > 2 else []
+        for part in subdomain_parts:
+            if part.lower() in shared_constants.BRAND_KEYWORDS and part.lower() not in registered_domain.lower():
+                score += 2
+                reasons.append(f"Brand keyword in subdomain ('{part}')")
+                break
+
+    # +1: Excessive subdomains
+    if len(parts) >= 4:
+        score += 1
+        reasons.append(f"{len(parts) - 2} subdomain levels")
 
     # VirusTotal results
     if vt_result:
@@ -112,18 +135,18 @@ def build_score_embed(url: str, score: int, reasons: List[str], threshold: int =
     """
     if score >= 8:
         color = discord.Color.red()
-        verdict = "🔴 High Risk"
+        verdict = "High Risk"
     elif score >= threshold:
         color = discord.Color.orange()
-        verdict = "🟠 Caution Advised"
+        verdict = "Caution Advised"
     elif score >= 3:
         color = discord.Color.yellow()
-        verdict = "🟡 Low Risk"
+        verdict = "Low Risk"
     else:
         color = discord.Color.green()
-        verdict = "🟢 Appears Safe"
+        verdict = "Appears Safe"
 
-    bar = "█" * score + "░" * (10 - score)
+    bar = "X" * score + "." * (10 - score)
 
     description_parts = [
         f"**Score:** {score}/10  |  {verdict}",
@@ -133,19 +156,19 @@ def build_score_embed(url: str, score: int, reasons: List[str], threshold: int =
     if reasons:
         description_parts.append("\n**Risk Factors:**")
         for reason in reasons:
-            description_parts.append(f"• {reason}")
+            description_parts.append(f"- {reason}")
     else:
-        description_parts.append("\n✅ No risk factors detected.")
+        description_parts.append("\nNo risk factors detected.")
 
-    description_parts.append(f"\n🔗 `{url}`")
+    description_parts.append(f"\n`{url}`")
     description_parts.append(f"\n*Threshold for auto-warning: {threshold}/10*")
 
     embed = discord.Embed(
-        title="🛡️ LinkBot Safety Score",
+        title="LinkBot Safety Score",
         description="\n".join(description_parts),
         color=color,
     )
-    embed.set_footer(text="LinkBot Safety • /scan for manual checks")
+    embed.set_footer(text="LinkBot Safety - /scan for manual checks")
 
     return embed
 
@@ -187,19 +210,19 @@ async def maybe_show_scorecard(message: discord.Message, config: dict = None) ->
             await message.channel.send(embed=embed)
             await stats.increment("safety_cards_shown")
 
-            # 2. Notify mod channel if configured (for scores >= 8 or notification_channel set)
+            # 2. Notify mod channel if configured
             if notification_channel_id and message.guild:
                 try:
                     notif_channel = message.guild.get_channel(int(notification_channel_id))
                     if notif_channel:
                         notif_embed = discord.Embed(
-                            title=f"🛡️ Safety Alert - Score {score}/10",
+                            title=f"Safety Alert - Score {score}/10",
                             description=(
                                 f"**User:** {message.author.mention} (`{message.author.id}`)\n"
                                 f"**Channel:** {message.channel.mention}\n"
                                 f"**Score:** {score}/10\n"
                                 f"**URL:** `{raw_url}`\n\n"
-                                + ("\n".join(f"• {r}" for r in reasons) if reasons else "No specific risks flagged.")
+                                + ("\n".join(f"- {r}" for r in reasons) if reasons else "No specific risks flagged.")
                             ),
                             color=discord.Color.red() if score >= 8 else discord.Color.orange(),
                         )
@@ -213,7 +236,7 @@ async def maybe_show_scorecard(message: discord.Message, config: dict = None) ->
                     log_channel = message.guild.get_channel(int(logging_channel_id))
                     if log_channel and log_channel.id != notification_channel_id:
                         log_embed = discord.Embed(
-                            title="📋 Safety Score Log",
+                            title="Safety Score Log",
                             description=(
                                 f"User `{message.author}` ({message.author.id}) "
                                 f"in {message.channel.mention} posted a link scoring {score}/10\n"

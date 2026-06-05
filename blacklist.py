@@ -9,8 +9,8 @@ Violation actions: delete message, timeout user, send ephemeral reply, ping mod 
 """
 
 import discord
-import asyncio
-from typing import Dict, Any, Optional, Literal
+from datetime import timedelta
+from typing import Dict, Any, Optional
 from urllib.parse import urlparse
 
 import stats
@@ -80,21 +80,20 @@ async def _apply_action(
     else:
         await stats.increment("blacklist_deletions")
 
-    # Send ephemeral-style reply (actually a channel message since
-    # we can't DM effectively after deleting; use a temp message or DM)
+    # Send ephemeral-style reply (temp channel message since original is deleted)
     try:
         await message.channel.send(
-            f"⚠️ {message.author.mention}: {custom_msg}",
+            f"{message.author.mention}: {custom_msg}",
             delete_after=10
         )
     except (discord.Forbidden, discord.HTTPException):
         pass
 
-    # Timeout the user if configured
+    # Timeout the user if configured (uses datetime.timedelta, not asyncio)
     if "timeout" in action and message.guild:
         try:
             await message.author.timeout(
-                discord.utils.utcnow() + asyncio.timedelta(minutes=timeout_duration),
+                discord.utils.utcnow() + timedelta(minutes=timeout_duration),
                 reason=f"Posted link to blocked domain: {domain}"
             )
             await stats.increment("timeouts_issued")
@@ -107,7 +106,7 @@ async def _apply_action(
             notif_channel = message.guild.get_channel(int(notification_channel_id))
             if notif_channel:
                 await notif_channel.send(
-                    f"🛡️ **Link blocked** in {message.channel.mention}\n"
+                    f"Link blocked in {message.channel.mention}\n"
                     f"User: {message.author.mention} (`{message.author.id}`)\n"
                     f"Domain: `{domain}`\n"
                     f"Mode: {mode}"
