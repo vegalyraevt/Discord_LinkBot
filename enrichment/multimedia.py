@@ -3,7 +3,8 @@ enrichment.multimedia.py - YouTube and Twitch link enrichment.
 
 Uses free oEmbed APIs - no API keys required.
 
-YouTube: Shows title, channel name, duration (formatted), thumbnail
+YouTube: Only handles Shorts conversion. Regular watch URLs are left alone
+         to let Discord's native video embed work.
 Twitch: Shows streamer name, game/title, thumbnail for clips and channels
 """
 
@@ -27,111 +28,58 @@ YOUTUBE_YOUTU_BE_REGEX = re.compile(
     r'https?://youtu\.be/([A-Za-z0-9_-]{11})'
 )
 
-# YouTube oEmbed endpoint (no API key needed)
 YOUTUBE_OEMBED = "https://www.youtube.com/oembed"
 YOUTUBE_NOEMBED_BASE = "https://noembed.com/embed"
 
 
 async def handle_youtube(message: discord.Message, config: dict = None) -> bool:
     """
-    Handle YouTube video links with rich info embed.
-    Supports youtube.com/watch, youtu.be, and youtube.com/shorts.
-    Returns True if handled.
+    Handle YouTube video links.
+    Regular watch URLs: do nothing (let Discord embed natively).
+    Shorts: convert and repost with info embed.
+    Returns True if handled (Shorts), False for regular watch URLs.
     """
     if config is None:
         config = {}
     if not config.get("enrichment", {}).get("youtube", True):
         return False
 
-    # Extract video ID
-    video_id = None
-    is_shorts = False
-
-    match = YOUTUBE_WATCH_REGEX.search(message.content)
-    if match:
-        video_id = match.group(1)
-    else:
-        match = YOUTUBE_YOUTU_BE_REGEX.search(message.content)
-        if match:
-            video_id = match.group(1)
-        else:
-            match = YOUTUBE_SHORTS_REGEX.search(message.content)
-            if match:
-                video_id = match.group(1)
-                is_shorts = True
-
-    if not video_id:
+    # Only handle Shorts in enrichment. Regular YouTube works natively.
+    match = YOUTUBE_SHORTS_REGEX.search(message.content)
+    if not match:
         return False
 
+    video_id = match.group(1)
+    is_shorts = True
     video_url = f"https://www.youtube.com/watch?v={video_id}"
 
     try:
         async with aiohttp.ClientSession() as session:
-            # Try oEmbed first
             oembed_url = f"{YOUTUBE_OEMBED}?url={video_url}&format=json"
             async with session.get(oembed_url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
                 if resp.status == 200:
                     data = await resp.json(content_type=None)
-                    title = data.get("title", "Unknown")
-                    author_name = data.get("author_name", "Unknown")
-                    thumbnail_url = data.get("thumbnail_url", "")
-                    html = data.get("html", "")
-
                     embed = discord.Embed(
-                        title=title,
+                        title=data.get("title", "Unknown"),
                         url=video_url,
                         color=discord.Color.red(),
-                        description=f"🎬 **Channel:** {author_name}"
+                        description=f"Channel: {data.get('author_name', 'Unknown')}"
                     )
-                    if thumbnail_url:
-                        embed.set_image(url=thumbnail_url)
-
-                    if is_shorts:
-                        embed.set_footer(text="YouTube Shorts • LinkBot")
-                    else:
-                        embed.set_footer(text="YouTube • LinkBot")
+                    thumb = data.get("thumbnail_url", "")
+                    if thumb:
+                        embed.set_image(url=thumb)
+                    embed.set_footer(text="YouTube Shorts - LinkBot")
 
                     try:
                         await message.edit(suppress=True)
                     except (discord.Forbidden, discord.HTTPException):
                         pass
-
-                    # Only show enrichment embed if the link wasn't fixed/removed
-                    # (the embed fixer handles Shorts, so this is for watch URLs)
-                    if not is_shorts:
-                        await message.reply(embed=embed, mention_author=False)
-
-                    await stats.increment("youtube_enrichments")
-                    return True
-
-            # Fallback: noembed.com
-            noembed_url = f"{YOUTUBE_NOEMBED_BASE}?url={video_url}"
-            async with session.get(noembed_url, timeout=aiohttp.ClientTimeout(total=5)) as resp2:
-                if resp2.status == 200:
-                    data = await resp2.json(content_type=None)
-                    title = data.get("title", "Unknown")
-                    author_name = data.get("author_name", "Unknown")
-                    thumbnail_url = data.get("thumbnail_url", "")
-
-                    embed = discord.Embed(
-                        title=title,
-                        url=video_url,
-                        color=discord.Color.red(),
-                        description=f"🎬 **Channel:** {author_name}"
-                    )
-                    if thumbnail_url:
-                        embed.set_image(url=thumbnail_url)
-                    embed.set_footer(text="YouTube • LinkBot")
-
-                    if not is_shorts:
-                        await message.reply(embed=embed, mention_author=False)
-
+                    await message.reply(embed=embed, mention_author=False)
                     await stats.increment("youtube_enrichments")
                     return True
     except Exception as e:
-        print(f"❌ YouTube enrichment error: {e}")
-
-    return True  # We matched the URL pattern even if enrichment failed
+        print(f"YouTube enrichment error: {e}")
+    return True
 
 
 # --- Twitch ---
@@ -147,17 +95,14 @@ TWITCH_OEMBED = "https://embed.twitch.tv/oembed"
 
 
 async def handle_twitch(message: discord.Message, config: dict = None) -> bool:
-    """
-    Handle Twitch clip and channel links with rich info embed.
-    Returns True if handled.
-    """
+    """Handle Twitch clip and channel links with rich info embed."""
     if config is None:
         config = {}
     if not config.get("enrichment", {}).get("twitch", True):
         return False
 
     twitch_url = None
-
+    
     # Check for clips first (more specific)
     clip_match = TWITCH_CLIP_REGEX.search(message.content)
     if clip_match:
@@ -180,15 +125,14 @@ async def handle_twitch(message: discord.Message, config: dict = None) -> bool:
                     title = data.get("title", "Unknown Broadcast")
                     author_name = data.get("author_name", "Unknown")
                     thumbnail_url = data.get("thumbnail_url", "")
-                    html = data.get("html", "")
 
                     # Try to extract game name from title (Twitch oEmbed puts "[Game] Streamer - Title")
-                    description_parts = [f"📺 **Streamer:** {author_name}"]
+                    description_parts = [f"Streamer: {author_name}"]
                     if " - " in title:
                         parts = title.split(" - ", 1)
                         if parts[0].startswith("["):
                             game = parts[0].strip("[]")
-                            description_parts.append(f"🎮 **Game:** {game}")
+                            description_parts.append(f"Game: {game}")
                             description_parts.append(parts[1])
                         else:
                             description_parts.append(title)
@@ -201,12 +145,10 @@ async def handle_twitch(message: discord.Message, config: dict = None) -> bool:
                     )
                     if thumbnail_url:
                         embed.set_image(url=thumbnail_url)
-                    embed.set_footer(text="Twitch • LinkBot")
-
+                    embed.set_footer(text="Twitch - LinkBot")
                     await message.reply(embed=embed, mention_author=False)
                     await stats.increment("twitch_enrichments")
                     return True
     except Exception as e:
-        print(f"❌ Twitch enrichment error: {e}")
-
-    return True  # Matched URL pattern
+        print(f"Twitch enrichment error: {e}")
+    return True
