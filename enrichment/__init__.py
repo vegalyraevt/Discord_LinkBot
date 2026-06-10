@@ -200,6 +200,9 @@ async def run_all_enrichment(message: discord.Message, client: discord.Client, c
     await integrations.handle_mdn(message, config)
     await integrations.handle_codeberg(message, config)
     await integrations.handle_bitbucket(message, config)
+    await integrations.handle_pcpartpicker(message, config)
+    await integrations.handle_camelcamelcamel(message, config)
+    await integrations.handle_ebay(message, config)
 
     # Core enrichment
     await github.handle_github_blob(message)

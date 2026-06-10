@@ -34,52 +34,13 @@ YOUTUBE_NOEMBED_BASE = "https://noembed.com/embed"
 
 async def handle_youtube(message: discord.Message, config: dict = None) -> bool:
     """
-    Handle YouTube video links.
-    Regular watch URLs: do nothing (let Discord embed natively).
-    Shorts: convert and repost with info embed.
-    Returns True if handled (Shorts), False for regular watch URLs.
+    YouTube links are handled by embeds.handle_link_fixer():
+    - Regular watch URLs: Discord native embed (no bot action needed)
+    - Shorts: converted to watch URLs and reposted via webhook (impersonating user)
+    - youtu.be: Discord native embed (no bot action needed)
+    This handler does nothing and always returns False.
     """
-    if config is None:
-        config = {}
-    if not config.get("enrichment", {}).get("youtube", True):
-        return False
-
-    # Only handle Shorts in enrichment. Regular YouTube works natively.
-    match = YOUTUBE_SHORTS_REGEX.search(message.content)
-    if not match:
-        return False
-
-    video_id = match.group(1)
-    is_shorts = True
-    video_url = f"https://www.youtube.com/watch?v={video_id}"
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            oembed_url = f"{YOUTUBE_OEMBED}?url={video_url}&format=json"
-            async with session.get(oembed_url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                if resp.status == 200:
-                    data = await resp.json(content_type=None)
-                    embed = discord.Embed(
-                        title=data.get("title", "Unknown"),
-                        url=video_url,
-                        color=discord.Color.red(),
-                        description=f"Channel: {data.get('author_name', 'Unknown')}"
-                    )
-                    thumb = data.get("thumbnail_url", "")
-                    if thumb:
-                        embed.set_image(url=thumb)
-                    embed.set_footer(text="YouTube Shorts - LinkBot")
-
-                    try:
-                        await message.edit(suppress=True)
-                    except (discord.Forbidden, discord.HTTPException):
-                        pass
-                    await message.reply(embed=embed, mention_author=False)
-                    await stats.increment("youtube_enrichments")
-                    return True
-    except Exception as e:
-        print(f"YouTube enrichment error: {e}")
-    return True
+    return False
 
 
 # --- Twitch ---

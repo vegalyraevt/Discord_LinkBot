@@ -58,6 +58,7 @@ TRACKING_DOMAINS = {
     'facebook.com', 'youtube.com', 'youtu.be', 'aliexpress.com', 'ebay.com',
     'amazon.com', 'amazon.co.uk', 'amazon.de', 'amazon.fr', 'amazon.ca',
     'twitter.com', 'x.com', 'instagram.com', 'tiktok.com', 'reddit.com',
+    'newegg.com', 'microcenter.com', 'bestbuy.com', 'bhphotovideo.com',
 }
 TRACKING_PARAMS = {
     'si', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',

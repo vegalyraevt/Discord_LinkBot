@@ -375,3 +375,170 @@ async def handle_bitbucket(message: discord.Message, config: dict = None) -> boo
     except Exception as e:
         print(f"Bitbucket enrichment error: {e}")
     return True
+
+
+# --- PCPartPicker ---
+
+PCPARTPICKER_REGEX = re.compile(
+    r'https?://(?:www\.)?pcpartpicker\.com/(?:product|list)/([^\s\)\]>]+)'
+)
+
+
+async def handle_pcpartpicker(message: discord.Message, config: dict = None) -> bool:
+    """Handle PCPartPicker links with part/build preview. Returns True if matched."""
+    if config is None:
+        config = {}
+    if not config.get("enrichment", {}).get("pcpartpicker", True):
+        return False
+
+    match = PCPARTPICKER_REGEX.search(message.content)
+    if not match:
+        return False
+
+    url = match.group(0)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                headers={"User-Agent": "LinkBot/2.0"},
+                timeout=aiohttp.ClientTimeout(total=8)
+            ) as resp:
+                if resp.status == 200:
+                    html = await resp.text()
+                    title_match = re.search(r'<meta property="og:title" content="([^"]+)"', html)
+                    desc_match = re.search(r'<meta property="og:description" content="([^"]+)"', html)
+                    image_match = re.search(r'<meta property="og:image" content="([^"]+)"', html)
+                    title = title_match.group(1) if title_match else "PCPartPicker Build"
+                    description = desc_match.group(1)[:1024] if desc_match else "No description available."
+
+                    embed = discord.Embed(
+                        title=title[:256],
+                        url=url,
+                        description=description,
+                        color=discord.Color.from_rgb(242, 169, 0),
+                    )
+                    if image_match:
+                        embed.set_thumbnail(url=image_match.group(1))
+                    embed.set_footer(text="PCPartPicker")
+                    await message.reply(embed=embed, mention_author=False)
+                    await stats.increment("commands_used")
+    except Exception as e:
+        print(f"PCPartPicker enrichment error: {e}")
+    return True
+
+
+# --- CamelCamelCamel ---
+
+CAMELCAMELCAMEL_REGEX = re.compile(
+    r'https?://(?:www\.)?camelcamelcamel\.com/product/([A-Za-z0-9]+)'
+)
+
+
+async def handle_camelcamelcamel(message: discord.Message, config: dict = None) -> bool:
+    """Handle CamelCamelCamel price tracker links with chart embed. Returns True if matched."""
+    if config is None:
+        config = {}
+    if not config.get("enrichment", {}).get("camelcamelcamel", True):
+        return False
+
+    match = CAMELCAMELCAMEL_REGEX.search(message.content)
+    if not match:
+        return False
+
+    asin = match.group(1)
+    url = match.group(0)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                headers={"User-Agent": "LinkBot/2.0"},
+                timeout=aiohttp.ClientTimeout(total=8)
+            ) as resp:
+                if resp.status == 200:
+                    html = await resp.text()
+                    title_match = re.search(r'<meta property="og:title" content="([^"]+)"', html)
+                    desc_match = re.search(r'<meta property="og:description" content="([^"]+)"', html)
+                    title = title_match.group(1) if title_match else f"Amazon Product {asin}"
+                    description = desc_match.group(1)[:1024] if desc_match else "Price history chart"
+
+                    embed = discord.Embed(
+                        title=title[:256],
+                        url=url,
+                        description=description,
+                        color=discord.Color.orange(),
+                    )
+                    # Embed the price history chart
+                    chart_url = f"https://charts.camelcamelcamel.com/us/{asin}/amazon-new-used.png?force=1&zero=0&w=600&h=400&desired=0&legend=1&ilt=1&tp=all&fo=0&lang=en"
+                    embed.set_image(url=chart_url)
+                    embed.set_footer(text="CamelCamelCamel Price Tracker")
+                    await message.reply(embed=embed, mention_author=False)
+                    await stats.increment("commands_used")
+    except Exception as e:
+        print(f"CamelCamelCamel enrichment error: {e}")
+    return True
+
+
+# --- eBay ---
+
+EBAY_REGEX = re.compile(
+    r'https?://(?:www\.)?ebay\.(?:com|co\.uk|de|fr|ca|com\.au)/itm/(\d+)'
+)
+
+
+async def handle_ebay(message: discord.Message, config: dict = None) -> bool:
+    """Handle eBay listing links with item preview. Returns True if matched."""
+    if config is None:
+        config = {}
+    if not config.get("enrichment", {}).get("ebay", True):
+        return False
+
+    match = EBAY_REGEX.search(message.content)
+    if not match:
+        return False
+
+    url = match.group(0)
+    item_id = match.group(1)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                headers={"User-Agent": "LinkBot/2.0"},
+                timeout=aiohttp.ClientTimeout(total=8)
+            ) as resp:
+                if resp.status == 200:
+                    html = await resp.text()
+                    title_match = re.search(r'<meta property="og:title" content="([^"]+)"', html)
+                    desc_match = re.search(r'<meta property="og:description" content="([^"]+)"', html)
+                    image_match = re.search(r'<meta property="og:image" content="([^"]+)"', html)
+                    price_match = re.search(r'<meta property="product:price:amount" content="([^"]+)"', html)
+                    currency_match = re.search(r'<meta property="product:price:currency" content="([^"]+)"', html)
+                    condition_match = re.search(r'<meta property="product:condition" content="([^"]+)"', html)
+
+                    title = title_match.group(1) if title_match else f"eBay Item {item_id}"
+                    # Strip " | eBay" suffix from og:title
+                    if title.endswith(" | eBay"):
+                        title = title[:-7].strip()
+                    description = desc_match.group(1)[:1024] if desc_match else "No description available."
+
+                    embed = discord.Embed(
+                        title=title[:256],
+                        url=url,
+                        description=description,
+                        color=discord.Color.from_rgb(229, 50, 55),
+                    )
+                    if price_match:
+                        price = price_match.group(1)
+                        currency = currency_match.group(1) if currency_match else "USD"
+                        embed.add_field(name="Price", value=f"{currency} ${price}", inline=True)
+                    if condition_match:
+                        # eBay encodes condition as enumerations like 'new', 'used', etc.
+                        condition = condition_match.group(1).replace("_", " ").title()
+                        embed.add_field(name="Condition", value=condition, inline=True)
+                    if image_match:
+                        embed.set_thumbnail(url=image_match.group(1))
+                    embed.set_footer(text="eBay")
+                    await message.reply(embed=embed, mention_author=False)
+                    await stats.increment("commands_used")
+    except Exception as e:
+        print(f"eBay enrichment error: {e}")
+    return True
